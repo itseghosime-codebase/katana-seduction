@@ -308,6 +308,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
 
         if (isReal && !isLoggedIn) {
             alert("You must log in to play the real game!");
+            setAutoSpinning(false);
             return;
         }
 
