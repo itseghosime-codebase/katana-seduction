@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --primary: #a837e2;
+  --text: #d58eff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-text: var(--text);
+  --font-montserrat: var(--font-montserrat);
+}
+
+html {
+  overscroll-behavior: none;
+}
+
+body {
+  color: var(--foreground);
+  user-select: none;
+  background-image: url("/images/background.jpg");
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-size: cover;
+  @apply font-montserrat w-screen h-screen;
+}
+
+@keyframes pulse-slow {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.03);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2.5s infinite;
+}
