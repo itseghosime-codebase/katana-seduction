@@ -339,7 +339,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 symbol: string | null;
             };
 
-            console.log(data)
+            // console.log(data)
 
             // const winAmount = data.bananaWon ?? 0;
             const winningPower = data.winningPower ?? 0;
