@@ -785,6 +785,11 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                     winSymbol,
                     middleRow
                 );
+                const positions = new Set<string>();
+                for (const cell of patternCells) {
+                    positions.add(`${cell.r}-${cell.c}`);
+                }
+                setWinningCells(positions);
                 finalGrid = g;
                 patternCells = cells;
             } else {
@@ -882,13 +887,17 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         const usd = credits / 100;
         return `$${usd.toFixed(2)}`;
     };
-
-    const cellClass = (cell: string, isWinningCell: boolean, isIdleGlow: boolean) => {
-        const base =
-            "flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 lg:w-16 lg:h-16 overflow-hidden relative transition-transform duration-300";
-        const winning = isWinningCell ? " win-cell scale-105 z-30" : "";
-        const idle = isIdleGlow ? " idle-glow" : "";
-        return base + winning + idle;
+    const cellClass = (
+        _cell: string,
+        isWinningCell: boolean,
+        isIdleGlow: boolean
+    ) => {
+        return [
+            "flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 lg:w-16 lg:h-16",
+            "overflow-hidden relative transition-transform duration-200",
+            isWinningCell ? "scale-[1.1] z-30 shadow-[0_0_28px_rgba(255,255,255,0.45)]" : "",
+            isIdleGlow && !isWinningCell ? "opacity-80" : "",
+        ].join(" ");
     };
 
     const isIdle = !spinning && !autoSpinning;
@@ -954,24 +963,37 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                                             className={
                                                 "relative w-full h-full flex items-center justify-center rounded-full overflow-hidden " +
                                                 "bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 " +
-                                                (isWinningCell ? "" : "") +
                                                 (!isWinningCell && spinning ? " opacity-90" : "")
                                             }
                                         >
+                                            {isWinningCell && (
+                                                <>
+                                                    <div
+                                                        className="
+                    pointer-events-none absolute inset-[-3px] rounded-full
+                    border-2 border-[#FF1EBE]
+                    shadow-[0_0_24px_rgba(255,30,190,0.85)]
+                    animate-pulse
+                "
+                                                    />
+                                                    <div
+                                                        className="
+                    pointer-events-none absolute inset-0 rounded-full
+                    bg-radial from-[#FF1EBE33] via-transparent to-transparent
+                    mix-blend-screen
+                "
+                                                    />
+                                                </>
+                                            )}
+
                                             <Image
                                                 src={symbols.includes(cell) ? cell : symbols[0]}
                                                 alt="Symbol"
                                                 width={70}
                                                 height={70}
-                                                className="object-contain h-full w-full select-none pointer-events-none"
+                                                className="object-contain h-full w-full select-none pointer-events-none relative z-10"
                                                 draggable={false}
                                             />
-
-                                            {isWinningCell && (
-                                                <div className="absolute inset-0 pointer-events-none">
-                                                    <div className="w-full h-full mix-blend-screen opacity-80" />
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 );
