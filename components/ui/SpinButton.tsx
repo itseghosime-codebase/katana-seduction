@@ -27,7 +27,6 @@ export default function SpinButton({
 
   const velocityRef = useRef(0); // degrees per ms
   const lastTimeRef = useRef<number | null>(null);
-
   const spinningRef = useRef(spinning);
 
   // keep ref in sync with prop
@@ -55,7 +54,7 @@ export default function SpinButton({
       const dt = time - lastTimeRef.current;
       lastTimeRef.current = time;
 
-      const shouldSpin = spinningRef.current; // 👈 ignore disabled for animation
+      const shouldSpin = spinningRef.current;
       const targetSpeed = shouldSpin ? MAX_SPEED : 0;
       let v = velocityRef.current;
 
@@ -91,11 +90,15 @@ export default function SpinButton({
     };
   }, []);
 
+  // heartbeat / breathing only when not spinning
+  const heartbeatClass = !spinning && !disabled ? "heartbeat-loop" : "";
+
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`${disabled ? "cursor-not-allowed" : ""}
+      className={`
+        ${disabled ? "cursor-not-allowed" : ""}
         font-extrabold 
         text-base sm:text-lg md:text-xl      
         text-[#E6D7FF] 
@@ -104,7 +107,9 @@ export default function SpinButton({
         hover:scale-102 active:scale-95
         group
         w-40 sm:w-44 lg:w-[200px]  
-        h-40 sm:h-44 lg:h-[200px]`}
+        h-40 sm:h-44 lg:h-[200px]
+        ${heartbeatClass}
+      `}
       style={{ position: "relative" }}
     >
       {/* Rotating wrapper */}
@@ -140,7 +145,6 @@ export default function SpinButton({
           w-full px-2 text-center
           transition-all duration-300
           group-hover:scale-105
-          animate-pulse-slow
           text-xl md:text-3xl lg:text-4xl     
         "
       >

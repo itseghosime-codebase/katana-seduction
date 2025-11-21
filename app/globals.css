@@ -30,11 +30,58 @@ body {
 }
 
 @keyframes win-pop {
-  0% { transform: scale(0.9); }
-  40% { transform: scale(1.12); }
-  70% { transform: scale(0.98); }
-  100% { transform: scale(1.02); }
+  0% {
+    transform: scale(0.9);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  70% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1.02);
+  }
 }
 .win-cell {
   animation: win-pop 420ms cubic-bezier(0.2, 0.8, 0.2, 1.1) forwards;
+}
+
+/* 5s total:
+ * - first ~3s: gentle heartbeat / breathing pulses
+ * - last ~2s: rest at scale(1)
+ */
+@keyframes heartbeat-loop {
+  0% {
+    transform: scale(1);
+  }
+  8% {
+    transform: scale(1.06);
+  }
+  16% {
+    transform: scale(1);
+  }
+  24% {
+    transform: scale(1.07);
+  }
+  32% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  48% {
+    transform: scale(1);
+  }
+  60% {
+    transform: scale(1); /* end of "active" 3s window */
+  }
+  100% {
+    transform: scale(1); /* 2s of rest, no movement */
+  }
+}
+
+.heartbeat-loop {
+  animation: heartbeat-loop 5s ease-in-out infinite;
+  transform-origin: center center;
 }
