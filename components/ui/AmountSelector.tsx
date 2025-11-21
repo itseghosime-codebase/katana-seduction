@@ -9,7 +9,7 @@ interface AmountSelectorProps {
     step?: number;
     value?: number;
     onChange?: (val: number) => void;
-    disabled?: boolean
+    disabled?: boolean;
 }
 
 export default function AmountSelector({
@@ -22,28 +22,23 @@ export default function AmountSelector({
 }: AmountSelectorProps) {
     const [amount, setAmount] = useState(value);
 
-    // sync with external value changes if needed
+    // Sync from parent → child (safe)
     useEffect(() => {
-        setAmount(value);
-    }, [value]);
+        if (value !== amount) setAmount(value);
+    }, [value, amount]);
 
     const increase = () => {
-        setAmount((prev) => {
-            const next = Math.min(prev + step, max);
-            onChange?.(next);
-            return next;
-        });
+        const next = Math.min(amount + step, max);
+        setAmount(next);        // local state update only
+        onChange?.(next);       // parent update separated
     };
 
     const decrease = () => {
-        setAmount((prev) => {
-            const next = Math.max(prev - step, min);
-            onChange?.(next);
-            return next;
-        });
+        const next = Math.max(amount - step, min);
+        setAmount(next);        // local state update only
+        onChange?.(next);       // parent update separated
     };
 
-    // disable states
     const isMin = amount <= min;
     const isMax = amount >= max;
 

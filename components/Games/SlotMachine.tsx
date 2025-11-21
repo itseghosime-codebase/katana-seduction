@@ -9,36 +9,34 @@ import ProgressSlider from "../ui/ProgressSlider";
 import { useSearchParams } from "next/navigation";
 import confetti from "canvas-confetti";
 
-/* -------------------- Symbols -------------------- */
 const symbols = [
-    "/images/characters/amor-hand.svg",
-    "/images/characters/amor.svg",
-    "/images/characters/blue-diamond.svg",
     "/images/characters/dager.svg",
-    "/images/characters/diamond.svg",
-    "/images/characters/flower.svg",
-    "/images/characters/fox.svg",
-    "/images/characters/gift-scroll.svg",
-    "/images/characters/granade.svg",
-    "/images/characters/lamp.svg",
-    "/images/characters/malemasked.svg",
     "/images/characters/masked.svg",
+    "/images/characters/flower.svg",
     "/images/characters/medal.svg",
-    "/images/characters/pink-diamond.svg",
-    "/images/characters/ruby.svg",
-    "/images/characters/sack-treasure.svg",
+    "/images/characters/malemasked.svg",
+    "/images/characters/sword.svg",
+    "/images/characters/amor.svg",
+    "/images/characters/fox.svg",
+    "/images/characters/amor-hand.svg",
+    "/images/characters/granade.svg",
     "/images/characters/scroll.svg",
     "/images/characters/spikes.svg",
-    "/images/characters/sword.svg",
+    "/images/characters/sack-treasure.svg",
+    "/images/characters/lamp.svg",
+    "/images/characters/gift-scroll.svg",
     "/images/characters/template.svg",
+    "/images/characters/ruby.svg",
+    "/images/characters/pink-diamond.svg",
+    "/images/characters/blue-diamond.svg",
+    "/images/characters/diamond.svg",
 ];
 
-/* -------------------- Bucket logic (20 buckets, values across 1..100) -------------------- */
 interface Bucket {
     symbol: string;
     min: number;
     max: number;
-    value: number; // representative "power" of this symbol (like SYMBOLS.power)
+    value: number;
 }
 
 const bucketValues: Bucket[] = (() => {
@@ -61,9 +59,6 @@ const bucketValues: Bucket[] = (() => {
     return buckets;
 })();
 
-/** Same idea as symbolForWinningPower in the HTML version:
- * pick the bucket with the highest value <= power.
- */
 function bucketForPower(power: number): Bucket {
     const p = Math.max(1, Math.min(100, power));
     let best = bucketValues[0];
@@ -75,7 +70,6 @@ function bucketForPower(power: number): Bucket {
     return best;
 }
 
-/* -------------------- Pattern chooser (remainder-based like HTML) -------------------- */
 export type Pattern =
     | "horizontal_3"
     | "horizontal_5"
@@ -86,40 +80,19 @@ export type Pattern =
     | "vshape"
     | "mega_cross";
 
-/**
- * HTML version logic:
- *   const symbol = symbolForWinningPower(p)
- *   const rem    = p - symbol.power
- *   const mod    = rem % 3
- *   0 => Horizontal
- *   1 => Vertical
- *   2 => Diagonal
- *
- * Here we do the same, then map those 3 "families" into concrete grid patterns.
- */
 function patternFromPower(power: number): Pattern {
     const bucket = bucketForPower(power || 1);
     const remainder = Math.max(0, power - bucket.value);
     const mod = remainder % 3;
 
-    if (mod === 0) {
-        // Horizontal family
-        return "horizontal_5";
-    } else if (mod === 1) {
-        // Vertical family
-        return "vertical_3";
-    } else {
-        // Diagonal family
-        return "diagonal_main";
-    }
+    if (mod === 0) return "horizontal_5";
+    if (mod === 1) return "vertical_3";
+    return "diagonal_main";
 }
 
-/* -------------------- Helpers -------------------- */
 function randomUniqueColumn(rows: number, exclude: string[] = []) {
-    // returns a column where symbols in the same column are unique if possible
     const available = symbols.filter((s) => !exclude.includes(s));
     if (rows > available.length) {
-        // allow repeats if not enough symbols
         const col: string[] = [];
         for (let r = 0; r < rows; r++) col.push(symbols[Math.floor(Math.random() * symbols.length)]);
         return col;
@@ -134,7 +107,6 @@ function randomUniqueColumn(rows: number, exclude: string[] = []) {
     return col;
 }
 
-/* -------------------- Winning grid creator (patterns) -------------------- */
 function applyWinningPattern(
     rows: number,
     cols: number,
@@ -146,7 +118,6 @@ function applyWinningPattern(
         Array.from({ length: cols }, () => "")
     );
 
-    // fill random base
     for (let c = 0; c < cols; c++) {
         const col = randomUniqueColumn(rows);
         for (let r = 0; r < rows; r++) grid[r][c] = col[r];
@@ -228,13 +199,10 @@ function applyWinningPattern(
     return { grid, patternCells };
 }
 
-
-/* -------------------- Losing grid: avoid accidental matches -------------------- */
 function hasContiguousMatch(grid: string[][]) {
     const rows = grid.length;
     const cols = grid[0].length;
 
-    // horizontal
     for (let r = 0; r < rows; r++) {
         let run = 1;
         for (let c = 1; c < cols; c++) {
@@ -245,7 +213,6 @@ function hasContiguousMatch(grid: string[][]) {
         }
     }
 
-    // vertical
     for (let c = 0; c < cols; c++) {
         let run = 1;
         for (let r = 1; r < rows; r++) {
@@ -256,7 +223,6 @@ function hasContiguousMatch(grid: string[][]) {
         }
     }
 
-    // diagonals (just check immediate neighbors)
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const v = grid[r][c];
@@ -272,7 +238,9 @@ function hasContiguousMatch(grid: string[][]) {
 function applyLosingGrid(rows: number, cols: number) {
     const maxAttempts = 10;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const grid: string[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+        const grid: string[][] = Array.from({ length: rows }, () =>
+            Array.from({ length: cols }, () => "")
+        );
 
         for (let c = 0; c < cols; c++) {
             const col = randomUniqueColumn(rows);
@@ -282,8 +250,9 @@ function applyLosingGrid(rows: number, cols: number) {
         if (!hasContiguousMatch(grid)) return grid;
     }
 
-    // fallback: tweak grid
-    const fallback: string[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+    const fallback: string[][] = Array.from({ length: rows }, () =>
+        Array.from({ length: cols }, () => "")
+    );
     for (let c = 0; c < cols; c++) {
         const col = randomUniqueColumn(rows);
         for (let r = 0; r < rows; r++) fallback[r][c] = col[r];
@@ -304,7 +273,6 @@ function applyLosingGrid(rows: number, cols: number) {
     return fallback;
 }
 
-/* -------------------- Audio feedback -------------------- */
 function playSpinTone() {
     try {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -323,9 +291,7 @@ function playSpinTone() {
             g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
             o.stop(ctx.currentTime + 0.3);
         }, 250);
-    } catch (e) {
-        // ignore audio failures
-    }
+    } catch (e) { }
 }
 
 function playWinTone(power: number) {
@@ -333,7 +299,7 @@ function playWinTone(power: number) {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         const o = ctx.createOscillator();
         const g = ctx.createGain();
-        const base = 220 + (power / 100) * 880; // 220-1100Hz
+        const base = 220 + (power / 100) * 880;
         o.type = "triangle";
         o.frequency.value = base;
         g.gain.value = 0.02 + (power / 100) * 0.08;
@@ -349,12 +315,46 @@ function playWinTone(power: number) {
     } catch (e) { }
 }
 
-/* -------------------- Component -------------------- */
+function playLoseTone() {
+    try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sawtooth";
+        o.frequency.value = 440;
+        g.gain.value = 0.03;
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start();
+        o.frequency.linearRampToValueAtTime(220, ctx.currentTime + 0.18);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+        o.stop(ctx.currentTime + 0.24);
+    } catch (e) { }
+}
 
 interface SlotMachineProps {
     balance: number | null;
     setBalance: React.Dispatch<React.SetStateAction<number | null>>;
 }
+
+type Outcome = "win" | "lose" | null;
+
+type ConfettiFn = (opts?: confetti.Options) => void;
+
+type SpinResponse = {
+    bananaWon: number;
+    newBalance: number;
+    isWin: boolean;
+    maxAllowedBet: number;
+    minBet: number;
+    canSpin: boolean;
+    spinMessageExtra: string;
+    mode: string;
+    isLoggedIn: boolean;
+    winningPower: number | null;
+    symbol: string | null;
+    pattern?: Pattern | null;
+};
 
 export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
     const rows = 5;
@@ -369,30 +369,53 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
     const searchParams = useSearchParams();
     const isReal = searchParams.get("real") === "1";
 
-    // machine state & UI
     const [minBet, setMinBet] = useState<number>(50);
     const [maxBet, setMaxBet] = useState<number>(1000);
     const [betAmount, setBetAmount] = useState<number>(50);
-    const [progress, setProgress] = useState<number>(0); // WinningPower visually
+    const [progress, setProgress] = useState<number>(0);
     const [autoSpinning, setAutoSpinning] = useState(false);
-    const [countdown, setCountdown] = useState<number | null>(null);
     const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
 
-    // Win UI
     const [lastWinCredits, setLastWinCredits] = useState<number | null>(null);
     const [lastWinSymbol, setLastWinSymbol] = useState<string | null>(null);
     const [lastWinningPower, setLastWinningPower] = useState<number | null>(null);
     const [winPatternUsed, setWinPatternUsed] = useState<Pattern | null>(null);
-    const [showWinBanner, setShowWinBanner] = useState(false);
+    const [showResultBanner, setShowResultBanner] = useState(false);
+    const [lastOutcome, setLastOutcome] = useState<Outcome>(null);
+    const [networkError, setNetworkError] = useState<string | null>(null);
 
-    // Track winning cells
     const [winningCells, setWinningCells] = useState<Set<string>>(new Set());
+    const [idleHighlightCell, setIdleHighlightCell] = useState<string | null>(null);
 
-    // init
+    const confettiCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const confettiInstanceRef = useRef<ConfettiFn | null>(null);
+
+    const [shakeOffset, setShakeOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    const shakeIntervalRef = useRef<number | null>(null);
+
+    const [aberrationFlash, setAberrationFlash] = useState(false);
+
+    const autoSpinRef = useRef(false);
+    const spinningRef = useRef(false);
+    const forceStopRef = useRef(false);
+    const canSpinRef = useRef(true);
+
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    useEffect(() => {
+        autoSpinRef.current = autoSpinning;
+    }, [autoSpinning]);
+
+    useEffect(() => {
+        spinningRef.current = spinning;
+    }, [spinning]);
+
     useEffect(() => {
         const fetchMachineStatus = async () => {
             try {
                 const res = await fetch(`/api/slot/status?real=${isReal ? 1 : 0}`);
+                if (!res.ok) throw new Error("Bad response");
+
                 const data = (await res.json()) as {
                     balance: number;
                     minBet: number;
@@ -401,19 +424,24 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                     mode: string;
                     isLoggedIn: boolean;
                 };
+
                 if (typeof data.balance === "number") setBalance(data.balance);
                 if (typeof data.minBet === "number") setMinBet(data.minBet);
                 if (typeof data.maxAllowedBet === "number") setMaxBet(data.maxAllowedBet);
                 if (typeof data.isLoggedIn === "boolean") setIsLoggedIn(data.isLoggedIn);
+
+                setNetworkError(null);
             } catch (err) {
                 console.error("fetchMachineStatus error:", err);
+                setNetworkError("No network connection. We can't reach the game server right now.");
             }
         };
 
         fetchMachineStatus();
 
-        // initial random grid
-        const initialGrid: string[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+        const initialGrid: string[][] = Array.from({ length: rows }, () =>
+            Array.from({ length: cols }, () => "")
+        );
         for (let c = 0; c < cols; c++) {
             const col = randomUniqueColumn(rows);
             for (let r = 0; r < rows; r++) initialGrid[r][c] = col[r];
@@ -422,7 +450,91 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isReal]);
 
-    /* -------------------- Column spin animation helpers -------------------- */
+    useEffect(() => {
+        const canvas = confettiCanvasRef.current;
+        if (!canvas) return;
+
+        const resize = () => {
+            const parent = canvas.parentElement;
+            if (!parent) return;
+            const rect = parent.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        };
+
+        resize();
+        window.addEventListener("resize", resize);
+
+        confettiInstanceRef.current = confetti.create(canvas, {
+            resize: true,
+            useWorker: true,
+        }) as ConfettiFn;
+
+        return () => {
+            window.removeEventListener("resize", resize);
+            confettiInstanceRef.current = null;
+            if (shakeIntervalRef.current) {
+                window.clearInterval(shakeIntervalRef.current);
+                shakeIntervalRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        const isIdle = !spinning && !autoSpinning && lastOutcome !== "win";
+        if (!isIdle) {
+            setIdleHighlightCell(null);
+            return;
+        }
+
+        const interval = window.setInterval(() => {
+            const r = Math.floor(Math.random() * rows);
+            const c = Math.floor(Math.random() * cols);
+            const key = `${r}-${c}`;
+            setIdleHighlightCell(key);
+            setTimeout(() => {
+                setIdleHighlightCell((current) => (current === key ? null : current));
+            }, 600);
+        }, 8000);
+
+        return () => window.clearInterval(interval);
+    }, [spinning, autoSpinning, lastOutcome]);
+
+    const triggerScreenShake = (power: number) => {
+        const duration = 320 + (power / 100) * 320;
+        const intensity = 3 + (power / 100) * 4;
+
+        const start = performance.now();
+
+        if (shakeIntervalRef.current) {
+            window.clearInterval(shakeIntervalRef.current);
+        }
+
+        shakeIntervalRef.current = window.setInterval(() => {
+            const elapsed = performance.now() - start;
+            if (elapsed >= duration) {
+                setShakeOffset({ x: 0, y: 0 });
+                if (shakeIntervalRef.current) {
+                    window.clearInterval(shakeIntervalRef.current);
+                    shakeIntervalRef.current = null;
+                }
+                return;
+            }
+
+            const progress = 1 - elapsed / duration;
+            const magnitude = intensity * progress;
+            const x = (Math.random() * 2 - 1) * magnitude;
+            const y = (Math.random() * 2 - 1) * magnitude;
+            setShakeOffset({ x, y });
+        }, 16);
+    };
+
+    const triggerAberrationFlash = (power: number) => {
+        const flashDuration = 140 + (power / 100) * 200;
+        setAberrationFlash(true);
+        setTimeout(() => setAberrationFlash(false), flashDuration);
+    };
+
     const startColumnSpin = (colIndex: number) => {
         playSpinTone();
         return window.setInterval(() => {
@@ -441,22 +553,35 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 clearInterval(intervals.current[c]!);
                 intervals.current[c] = null;
             }
+
             for (let r = 0; r < rows; r++) {
+                if (forceStopRef.current) {
+                    setGrid((prev) => {
+                        const copy = prev.map((row) => [...row]);
+                        for (let cc = c; cc < cols; cc++) {
+                            for (let rr = 0; rr < rows; rr++) {
+                                copy[rr][cc] = finalGrid[rr][cc];
+                            }
+                        }
+                        return copy;
+                    });
+                    return;
+                }
+
                 setGrid((prev) => {
                     const copy = prev.map((row) => [...row]);
                     copy[r][c] = finalGrid[r][c];
                     return copy;
                 });
-                // eslint-disable-next-line no-await-in-loop
+
                 await new Promise((res) => setTimeout(res, 18));
             }
+
             const jitter = Math.floor(Math.random() * 60) - 20;
-            // eslint-disable-next-line no-await-in-loop
             await new Promise((res) => setTimeout(res, baseDelay + jitter));
         }
     };
 
-    /* smooth progress bar animation */
     const animateToPower = (target: number, duration = 700) => {
         let start: number | null = null;
         const initial = progress;
@@ -470,26 +595,169 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         requestAnimationFrame(step);
     };
 
-    /* -------------------- Spin logic (HTML-like WinningPower logic) -------------------- */
+    const triggerConfettiByPower = (power: number) => {
+        const instance = confettiInstanceRef.current ?? (confetti as unknown as ConfettiFn);
+        if (!instance) return;
+
+        const intensity = Math.max(0.3, power / 100);
+        const duration = 1300 + 900 * intensity;
+        const animationEnd = Date.now() + duration;
+
+        const colors = ["#D58EFF", "#FF80E5", "#FFE066", "#FFFFFF"];
+
+        if (power < 40) {
+            instance({
+                particleCount: 30 + 30 * intensity,
+                spread: 45,
+                startVelocity: 40 + 20 * intensity,
+                scalar: 0.9 + intensity * 0.3,
+                origin: { x: 0.5, y: 0.5 },
+                gravity: 0.85,
+                ticks: 80,
+                colors,
+            });
+            return;
+        }
+
+        instance({
+            particleCount: 60 + 60 * intensity,
+            spread: 70,
+            startVelocity: 55 + 25 * intensity,
+            scalar: 1.1 + intensity * 0.5,
+            origin: { x: 0.5, y: 0.45 },
+            gravity: 0.9,
+            ticks: 110,
+            colors,
+        });
+
+        instance({
+            particleCount: 40 + 40 * intensity,
+            spread: 360,
+            startVelocity: 45 + 20 * intensity,
+            scalar: 0.8 + intensity * 0.4,
+            origin: { x: 0.5, y: 0.5 },
+            gravity: 0.7,
+            ticks: 90,
+            colors,
+        });
+
+        const sideDefaults = {
+            startVelocity: 50 + 20 * intensity,
+            spread: 55,
+            gravity: 0.95,
+            ticks: 100,
+            scalar: 0.9 + intensity * 0.3,
+            colors,
+        };
+
+        const sideInterval = window.setInterval(() => {
+            const timeLeft = animationEnd - Date.now();
+            if (timeLeft <= 0) {
+                clearInterval(sideInterval);
+                return;
+            }
+
+            const pc = 10 + Math.floor(12 * intensity);
+
+            instance({
+                ...sideDefaults,
+                particleCount: pc,
+                angle: 60,
+                origin: { x: 0.05, y: 0.6 },
+            });
+
+            instance({
+                ...sideDefaults,
+                particleCount: pc,
+                angle: 120,
+                origin: { x: 0.95, y: 0.6 },
+            });
+        }, 140);
+
+        const drizzleEnd = animationEnd - 300;
+        const drizzleInterval = window.setInterval(() => {
+            const timeLeft = drizzleEnd - Date.now();
+            if (timeLeft <= 0) {
+                clearInterval(drizzleInterval);
+                return;
+            }
+
+            instance({
+                particleCount: 4 + Math.floor(4 * intensity),
+                startVelocity: 15 + 10 * intensity,
+                spread: 20,
+                origin: { x: 0.5 + (Math.random() - 0.5) * 0.3, y: 0.1 },
+                gravity: 1.2,
+                ticks: 120,
+                scalar: 0.6 + intensity * 0.3,
+                shapes: ["circle"],
+                colors,
+            });
+        }, 90);
+
+        if (power >= 85) {
+            setTimeout(() => {
+                instance({
+                    particleCount: 100,
+                    spread: 100,
+                    startVelocity: 70,
+                    scalar: 1.7,
+                    origin: { x: 0.5, y: 0.4 },
+                    gravity: 0.9,
+                    ticks: 120,
+                    colors,
+                });
+            }, 400);
+        }
+    };
+
+    const AUTO_SPIN_BREAK_MS = 3000;
+
     const spin = async () => {
-        if (spinning) return;
+        if (spinningRef.current) return;
 
         if (isReal && !isLoggedIn) {
             alert("You must log in to play the real game!");
             return;
         }
 
-        intervals.current.forEach((i) => i && clearInterval(i));
-        intervals.current = [];
+        if (networkError) {
+            console.warn("Spin prevented because of network issue:", networkError);
+            setAutoSpinning(false);
+            return;
+        }
 
+        spinningRef.current = true;
         setSpinning(true);
-        setShowWinBanner(false);
+
+        setShowResultBanner(false);
         setLastWinCredits(null);
         setLastWinningPower(null);
         setLastWinSymbol(null);
         setWinPatternUsed(null);
         setWinningCells(new Set());
+        setLastOutcome(null);
         setProgress(0);
+        forceStopRef.current = false;
+
+        let data: SpinResponse;
+
+        try {
+            const res = await fetch(`/api/slot/play?real=${isReal ? 1 : 0}&bet_amount=${betAmount}`);
+            if (!res.ok) throw new Error(`${res.status}`);
+            data = (await res.json()) as SpinResponse;
+        } catch (err) {
+            console.error("network error:", err);
+            setNetworkError("No internet or server unreachable.");
+            spinningRef.current = false;
+            setSpinning(false);
+            return;
+        }
+
+        canSpinRef.current = data.canSpin;
+
+        intervals.current.forEach((i) => i && clearInterval(i));
+        intervals.current = [];
 
         for (let i = 0; i < cols; i++) {
             setTimeout(() => {
@@ -498,36 +766,15 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         }
 
         try {
-            const res = await fetch(`/api/slot/play?real=${isReal ? 1 : 0}&bet_amount=${betAmount}`);
-            const data = (await res.json()) as {
-                bananaWon: number;
-                newBalance: number;
-                isWin: boolean;
-                maxAllowedBet: number;
-                minBet: number;
-                canSpin: boolean;
-                spinMessageExtra: string;
-                mode: string;
-                isLoggedIn: boolean;
-                winningPower: number | null;
-                symbol: string | null;
-                pattern?: Pattern | null;
-            };
-
-            // Clamp WinningPower like HTML logic
             const winningPowerRaw = data.winningPower ?? 0;
             const winningPower = Math.max(0, Math.min(100, winningPowerRaw));
             const isWin = !!data.isWin;
 
-            // 🔗 Same process as HTML:
-            // 1) pick symbol bucket from WinningPower
             const bucket = bucketForPower(winningPower || 1);
             const winSymbol = bucket.symbol;
-
-            // 2) use remainder-based mapping to a pattern family, then concrete pattern
             const pattern = patternFromPower(winningPower || 1);
 
-            let finalGrid = [];
+            let finalGrid: string[][] = [];
             let patternCells: { r: number; c: number }[] = [];
 
             if (isWin) {
@@ -545,6 +792,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
             }
 
             await stopColumnsSmoothly(finalGrid);
+            await wait(isWin && winningPower >= 80 ? 220 : 140);
 
             setBalance(typeof data.newBalance === "number" ? data.newBalance : balance);
 
@@ -559,115 +807,156 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 setLastWinSymbol(winSymbol);
                 setLastWinningPower(winningPower);
                 setWinPatternUsed(pattern);
-                setShowWinBanner(true);
+                setLastOutcome("win");
+                setShowResultBanner(true);
 
                 animateToPower(winningPower);
                 playWinTone(winningPower);
                 triggerConfettiByPower(winningPower);
+
+                if (winningPower >= 85) {
+                    triggerScreenShake(winningPower);
+                    triggerAberrationFlash(winningPower);
+                }
             } else {
                 setWinningCells(new Set());
+                setLastOutcome("lose");
+                setShowResultBanner(true);
                 animateToPower(0);
+                playLoseTone();
             }
         } catch (err) {
             console.error("spin error:", err);
             intervals.current.forEach((i) => i && clearInterval(i));
-        } finally {
-            setSpinning(false);
-            intervals.current.forEach((i) => i && clearInterval(i));
             intervals.current = [];
+            canSpinRef.current = false;
+            setNetworkError("No network connection. Spin failed – please check your internet and try again.");
+        }
+
+        intervals.current.forEach((i) => i && clearInterval(i));
+        intervals.current = [];
+
+        forceStopRef.current = false;
+
+        spinningRef.current = false;
+        setSpinning(false);
+
+        if (autoSpinRef.current && canSpinRef.current) {
+            await wait(AUTO_SPIN_BREAK_MS);
+            if (!autoSpinRef.current) return;
+            if (spinningRef.current) return;
+            spin();
         }
     };
 
-    /* -------------------- autoplay -------------------- */
-    useEffect(() => {
-        if (!autoSpinning || spinning) {
-            setCountdown(null);
+    const handleAutoSpin = () => {
+        if (isReal && !isLoggedIn) {
+            alert("You must log in to use AUTOSPIN in real mode.");
             return;
         }
-        let remaining = 5;
-        setCountdown(remaining);
-        const interval = setInterval(() => {
-            remaining -= 1;
-            setCountdown(remaining);
-            if (remaining <= 0) {
-                clearInterval(interval);
-                spin();
+
+        if (networkError) {
+            alert("Network error. AUTOSPIN cannot start until the connection is restored.");
+            return;
+        }
+
+        setAutoSpinning((prev) => {
+            const next = !prev;
+            autoSpinRef.current = next;
+
+            if (!next) {
+                forceStopRef.current = true;
+            } else {
+                forceStopRef.current = false;
+                if (!spinningRef.current) {
+                    spin();
+                }
             }
-        }, 1000);
-        return () => clearInterval(interval);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoSpinning, spinning]);
 
-    const handleAutoSpin = () => setAutoSpinning((st) => !st);
-
-    /* -------------------- confetti helper scaled by power -------------------- */
-    const triggerConfettiByPower = (power: number) => {
-        const amount = Math.min(400, 30 + Math.floor((power / 100) * 400));
-        const duration = 1600 + Math.floor((power / 100) * 2000);
-        const end = Date.now() + duration;
-
-        const defaults = { startVelocity: 35, spread: 360, ticks: 60, zIndex: 9999 };
-
-        const interval = setInterval(() => {
-            const timeLeft = end - Date.now();
-            if (timeLeft <= 0) return clearInterval(interval);
-            const particleCount = Math.floor((timeLeft / duration) * amount);
-            confetti({ ...defaults, particleCount, origin: { x: 0.2, y: Math.random() - 0.2 } });
-            confetti({ ...defaults, particleCount, origin: { x: 0.8, y: Math.random() - 0.2 } });
-        }, 250);
+            return next;
+        });
     };
 
-    /* format credits -> USD */
-    const creditsToUSD = (credits: number | null) => {
-        if (credits === null) return "-";
-        const usd = credits / 100; // 100 credits = 1 USD
+    const creditsToUSD = (credits: number | null | number) => {
+        if (credits === null || credits === undefined) return "-";
+        const usd = credits / 100;
         return `$${usd.toFixed(2)}`;
     };
 
-    /* cell class: if cell matches win set, highlight */
-    const cellClass = (cell: string) => {
-        const isWinning = showWinBanner && lastWinSymbol && cell === lastWinSymbol;
-        return `flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 lg:w-16 lg:h-16 overflow-hidden relative transition-transform duration-300
-      ${isWinning ? "scale-105 z-30" : ""}
-    `;
+    const cellClass = (cell: string, isWinningCell: boolean, isIdleGlow: boolean) => {
+        const base =
+            "flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 lg:w-16 lg:h-16 overflow-hidden relative transition-transform duration-300";
+        const winning = isWinningCell ? " win-cell scale-105 z-30" : "";
+        const idle = isIdleGlow ? " idle-glow" : "";
+        return base + winning + idle;
+    };
+
+    const isIdle = !spinning && !autoSpinning;
+
+    const resultMainText = () => {
+        if (!lastOutcome) return "";
+        return lastOutcome === "win" ? "YOU WIN" : "YOU LOSE";
+    };
+
+    const resultSubText = () => {
+        if (lastOutcome === "win" && lastWinCredits !== null) {
+            return `You won ${creditsToUSD(lastWinCredits)} (${lastWinCredits} credits)`;
+        }
+        if (lastOutcome === "lose") {
+            return `You lost ${creditsToUSD(betAmount)} (${betAmount} credits)`;
+        }
+        return "";
     };
 
     return (
         <div className="relative z-20">
-            {/* Win Banner */}
-            {showWinBanner && lastWinCredits !== null && (
-                <div className="absolute left-0  bottom-full z-50 pointer-events-none">
-                    <div className="bg-yellow-400/95 text-black px-6 py-3 rounded-xl shadow-2xl flex flex-col items-center animate-pop">
-                        <div className="font-bold text-lg">BIG WIN!</div>
-                        <div className="mt-1 text-sm">
-                            {lastWinCredits} credits • {creditsToUSD(lastWinCredits)}
-                        </div>
-                        <div className="mt-1 text-xs opacity-80">
-                            {lastWinningPower ? `Power ${lastWinningPower}` : ""}
-                        </div>
-                    </div>
+            {networkError && (
+                <div className="mb-3 px-4 py-3 rounded-lg bg-red-600/20 border border-red-500/60 text-red-200 text-sm flex items-center gap-2 max-w-2xl mx-auto">
+                    <span className="inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                    <span>{networkError}</span>
                 </div>
             )}
 
             <div className="flex flex-col md:flex-row gap-6 items-center justify-center">
-                {/* GRID */}
-                <div className="relative w-full max-w-4xl">
-                    <div className="relative z-5 grid grid-cols-7 gap-3 lg:gap-4 py-8 lg:py-12 px-6 md:px-8 lg:px-14 bg-black/40 rounded-xl">
+                <div
+                    className="relative w-full max-w-4xl"
+                    style={{
+                        transform: `translate(${shakeOffset.x}px, ${shakeOffset.y}px)`,
+                        transition: "transform 40ms ease-out",
+                    }}
+                >
+                    <div
+                        className={
+                            "relative z-5 grid grid-cols-7 gap-3 lg:gap-4 py-8 lg:py-12 px-6 md:px-8 lg:px-14 " +
+                            "overflow-hidden" +
+                            "transition-transform duration-200 " +
+                            (spinning ? "scale-[0.98] opacity-80" : "") +
+                            (isIdle ? " idle-breathe" : "")
+                        }
+                    >
                         {grid.map((row, rIdx) =>
                             row.map((cell, cIdx) => {
-                                const isWinningCell = showWinBanner && winningCells.has(`${rIdx}-${cIdx}`);
+                                const key = `${rIdx}-${cIdx}`;
+                                const isWinningCell =
+                                    lastOutcome === "win" && winningCells.has(key);
+                                const isIdleGlow =
+                                    isIdle && !lastOutcome && idleHighlightCell === key;
+
                                 return (
                                     <div
-                                        key={`${rIdx}-${cIdx}`}
-                                        className={cellClass(cell)}
+                                        key={key}
+                                        className={cellClass(cell, isWinningCell, isIdleGlow)}
                                         style={{
                                             transitionDelay: `${(cIdx * rows + rIdx) * 8}ms`,
                                         }}
                                     >
                                         <div
-                                            className={`relative w-full h-full flex items-center justify-center rounded-md overflow-hidden
-                      ${isWinningCell ? "animate-pulse" : ""}
-                      ${!isWinningCell && spinning ? "opacity-90" : ""}`}
+                                            className={
+                                                "relative w-full h-full flex items-center justify-center rounded-full overflow-hidden " +
+                                                "bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 " +
+                                                (isWinningCell ? "" : "") +
+                                                (!isWinningCell && spinning ? " opacity-90" : "")
+                                            }
                                         >
                                             <Image
                                                 src={symbols.includes(cell) ? cell : symbols[0]}
@@ -690,33 +979,84 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                         )}
                     </div>
 
-                    {/* background art */}
+                    <canvas
+                        ref={confettiCanvasRef}
+                        className="pointer-events-none absolute inset-0 z-30"
+                    />
+
+                    {aberrationFlash && (
+                        <div className="pointer-events-none absolute inset-0 z-40">
+                            <div
+                                className="w-full h-full"
+                                style={{
+                                    mixBlendMode: "screen",
+                                    backgroundImage:
+                                        "radial-gradient(circle at 20% 20%, rgba(255,0,128,0.35) 0, transparent 55%), radial-gradient(circle at 80% 80%, rgba(0,255,255,0.35) 0, transparent 55%)",
+                                    filter: "blur(1px)",
+                                }}
+                            />
+                        </div>
+                    )}
+
                     <Image
                         draggable={false}
                         src="/images/game-bg.png"
                         alt="background Box"
                         fill
                         sizes="100%"
-                        className="absolute top-0 left-0 w-full h-full z-0 pointer-events-none"
+                        className={
+                            "absolute top-0 left-0 w-full h-full z-0 pointer-events-none " +
+                            "transition-transform duration-500 " +
+                            (spinning ? "scale-[1.03]" : "scale-100")
+                        }
                     />
+
+                    {showResultBanner && lastOutcome && (
+                        <div className="absolute inset-x-4.5 md:inset-x-5 lg:inset-x-8 bottom-1/2 translate-y-1/2 z-50 pointer-events-none">
+                            <div
+                                className={
+                                    "px-6 py-4 min-h-20 bg-[#340F72] text-[#D58EFF] justify-center shadow-[0_0_40px_rgba(213,142,255,0.25)] " +
+                                    "flex flex-col items-center animate-win-banner "
+                                }
+                            >
+                                <div className="font-montserrat font-bold tracking-widest text-lg md:text-xl lg:text-2xl">
+                                    {resultMainText()}
+                                </div>
+
+                                {resultSubText() && (
+                                    <div className="mt-1 text-sm md:text-base opacity-90">
+                                        {resultSubText()}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Controls */}
-                <div className="flex flex-wrap justify-center md:flex-col gap-4 items-center w-full md:w-auto">
+                <div className="flex flex-wrap justify-center md:flex-col gap-5 items-center w-full md:w-auto">
                     <CircularButton
                         text={
-                            spinning
-                                ? "AUTOSPIN"
-                                : countdown !== null
-                                    ? countdown.toString()
+                            isReal && isLoggedIn
+                                ? autoSpinning
+                                    ? "STOP"
+                                    : "AUTOSPIN"
+                                : isReal && !isLoggedIn
+                                    ? "AUTOSPIN"
                                     : autoSpinning
-                                        ? "ON"
+                                        ? "STOP"
                                         : "AUTOSPIN"
                         }
                         onClick={handleAutoSpin}
-                        disabled={spinning}
+                        disabled={spinning && !autoSpinning}
+                        spinning={spinning}
                     />
-                    <SpinButton onClick={spin} disabled={spinning || autoSpinning} />
+
+                    <SpinButton
+                        onClick={spin}
+                        disabled={spinning || autoSpinning}
+                        spinning={autoSpinning ? false : spinning}
+                    />
+
                     <AmountSelector
                         min={minBet}
                         max={maxBet}
@@ -728,12 +1068,10 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 </div>
             </div>
 
-            {/* progress slider */}
-            <div className="mt-4">
+            <div className="mt-4 ">
                 <ProgressSlider progress={progress} />
             </div>
 
-            {/* small legend & last win details (hidden by default) */}
             <div className="mt-3 text-xs text-gray-400 gap-4 hidden justify-center">
                 <div>RTP: 96.3%</div>
                 <div>
@@ -742,6 +1080,11 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                         : "No recent win"}
                 </div>
                 <div>{winPatternUsed ? `Pattern: ${winPatternUsed}` : ""}</div>
+            </div>
+
+            <div className="hidden">
+                {lastWinSymbol}
+                {lastWinningPower}
             </div>
         </div>
     );
