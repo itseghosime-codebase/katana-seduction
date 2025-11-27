@@ -1,105 +1,195 @@
-'use client';
+"use client";
 
-import SlotMachine from '@/components/Games/SlotMachine';
-import HeaderBtn from '@/components/ui/HeaderBtn';
-import Image from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, Suspense } from 'react';
+import SlotMachine from "@/components/Games/SlotMachine";
+import HeaderBtn from "@/components/ui/HeaderBtn";
+import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense, useRef } from "react";
+import KatanaLoader from "../ui/KatanaLoader";
 
 export default function KatanaGame() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [balance, setBalance] = useState<number | null>(null);
 
-  const initialReal = searchParams.get('real') === '1';
-  const [isRealGame, setIsRealGame] = useState(initialReal);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [isRealGame, setIsRealGame] = useState(
+    searchParams.get("real") === "1"
+  );
+
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // timing config
+  const MIN_LOAD_TIME = 3000;              // loader visible at least 3s
+  const EXTRA_DELAY_AFTER_READY = 2000;    // +2s after fetch completes
+
+  const loadStart = useRef<number>(Date.now()); // when loader cycle started
+  const [shouldShowLoader, setShouldShowLoader] = useState(true);
+
+  const fetchCurrentBalance = async (realValue: number) => {
+    // new cycle
+    loadStart.current = Date.now();
+    setShouldShowLoader(true);
+    setLoadError(null);
+
+    try {
+      const res = await fetch(`/api/slot/status?real=${realValue}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error("Bad response");
+
+      const data = await res.json();
+      setBalance(data.balance ?? 0);
+
+      // mark when backend finished
+      const now = Date.now();
+      const minEndTime = loadStart.current + MIN_LOAD_TIME;          // min total time
+      const readyPlusDelay = now + EXTRA_DELAY_AFTER_READY;          // +2s after fetch
+      const endTime = Math.max(minEndTime, readyPlusDelay);          // satisfy both
+
+      const delay = Math.max(endTime - now, 0);
+
+      setTimeout(() => {
+        setShouldShowLoader(false);
+      }, delay);
+    } catch (e) {
+      console.error(e);
+      setLoadError("We can't reach the game server.");
+      setBalance(null);
+
+      // even on error, respect the timing so UX feels consistent
+      const now = Date.now();
+      const minEndTime = loadStart.current + MIN_LOAD_TIME;
+      const readyPlusDelay = now + EXTRA_DELAY_AFTER_READY;
+      const endTime = Math.max(minEndTime, readyPlusDelay);
+      const delay = Math.max(endTime - now, 0);
+
+      setTimeout(() => {
+        setShouldShowLoader(false);
+      }, delay);
+    }
+  };
+
+  useEffect(() => {
+    fetchCurrentBalance(isRealGame ? 1 : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRealGame]);
 
   const toggleGameMode = () => {
     const newMode = !isRealGame;
     setIsRealGame(newMode);
+    setBalance(null);
     router.push(`/katana?real=${newMode ? 1 : 0}`);
+
+    // start new loader cycle immediately
+    loadStart.current = Date.now();
+    setShouldShowLoader(true);
+    fetchCurrentBalance(newMode ? 1 : 0);
   };
 
   const resetBalance = async () => {
     try {
       const realValue = isRealGame ? 1 : 0;
 
-      await fetch(`/api/slot/reset?real=${realValue}`, { method: "GET", cache: "no-store" });
+      // new loader cycle on reset
+      loadStart.current = Date.now();
+      setShouldShowLoader(true);
+      setLoadError(null);
 
-      const statusRes = await fetch(`/api/slot/status?real=${realValue}`, { method: "GET", cache: "no-store" });
-      const statusData = await statusRes.json();
-      setBalance(statusData.balance);
+      await fetch(`/api/slot/reset?real=${realValue}`, {
+        cache: "no-store",
+      });
+
+      await fetchCurrentBalance(realValue);
     } catch (e) {
-      console.error("Reset failed", e);
+      console.error("RESET FAILED", e);
+      setLoadError("Reset failed.");
+
+      const now = Date.now();
+      const minEndTime = loadStart.current + MIN_LOAD_TIME;
+      const readyPlusDelay = now + EXTRA_DELAY_AFTER_READY;
+      const endTime = Math.max(minEndTime, readyPlusDelay);
+      const delay = Math.max(endTime - now, 0);
+
+      setTimeout(() => {
+        setShouldShowLoader(false);
+      }, delay);
     }
   };
 
   return (
     <>
-      {/* Header */}
-      <div className="flex flex-wrap gap-4 items-center w-full justify-center md:justify-between bg-primary py-2 px-4 md:px-10">
-        <div className="flex items-center gap-2 md:gap-3 justify-center">
+      {/* HEADER */}
+      <div
+        className={`flex flex-wrap gap-4 items-center w-full justify-center ${balance ? "md:justify-between" : ""
+          } bg-primary py-3 px-4 md:px-10`}
+      >
+        <div className="flex items-center gap-3">
           <Image
-            src={'/images/katana_seduction.svg'}
-            alt="Katana Logo"
+            src={"/images/katana_seduction.svg"}
+            alt="Katana"
             width={50}
             height={50}
-            draggable={false}
-            className="w-10 h-10 md:w-14 md:h-14"
-            priority
           />
-          <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-black text-center shrink-0">
-            KATANA SEDUCTION
-          </h1>
+          <h1 className="text-xl font-bold text-black">KATANA SEDUCTION</h1>
         </div>
 
-        <div className='flex items-center justify-center gap-3 flex-wrap md:gap-5'>
-          <button className="py-2.5 font-bold min-h-12 min-w-22 shadow-[inset_-1px_-1px_7px_rgba(0,0,0,0.3)] px-6 bg-[#A837E2] border-3 border-[#340F72] rounded-2xl">
-            {balance !== null ? balance.toLocaleString() : '---'}
-          </button>
+        {!shouldShowLoader && balance !== null && (
+          <div className="flex flex-wrap justify-center items-center gap-4">
+            <button className="py-2.5 px-6 bg-[#A837E2] border-3 border-[#340F72] rounded-2xl font-bold">
+              {balance.toLocaleString()}
+            </button>
 
-          <HeaderBtn
-            text={!isRealGame ? 'REAL GAME' : 'DEMO GAME'}
-            image={isRealGame ? '/images/buttons/real.svg' : '/images/buttons/demo.svg'}
-            color="text-white"
-            onClick={toggleGameMode}
-          />
+            <HeaderBtn
+              text={isRealGame ? "DEMO GAME" : "REAL GAME"}
+              image={
+                isRealGame
+                  ? "/images/buttons/real.svg"
+                  : "/images/buttons/demo.svg"
+              }
+              color="text-white"
+              onClick={toggleGameMode}
+            />
 
-          <HeaderBtn
-            text='RESET'
-            image='/images/buttons/real.svg'
-            color='text-[#CFCFCF]'
-            onClick={resetBalance}
-          />
-        </div>
+            <HeaderBtn
+              text="RESET"
+              image="/images/buttons/real.svg"
+              color="text-[#CFCFCF]"
+              onClick={resetBalance}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Body */}
+      {/* BODY */}
       <div className="relative flex-1 flex items-center p-4 md:p-8 w-full">
         <Image
-          src={'/images/start_background.png'}
-          alt="Background Image"
-          priority
-          sizes="100%"
-          draggable={false}
+          src={"/images/start_background.png"}
+          alt="Background"
           fill
-          className="h-full w-full inset-0 bg-cover object-cover object-center absolute z-0"
+          className="absolute inset-0 object-cover z-0"
         />
 
-        {/* SlotMachine with Suspense */}
-        <Suspense fallback={<div className="text-white font-bold text-xl">Loading Slot Machine...</div>}>
-          <SlotMachine balance={balance} setBalance={setBalance} />
-        </Suspense>
-
-        <Image
-          src={'/images/avatars/lets-play.png'}
-          alt="Character Back"
-          priority
-          draggable={false}
-          width={433}
-          height={538}
-          className="absolute bottom-0 right-0 z-0 w-56 md:w-72 lg:w-96 pointer-events-none select-none"
-        />
+        {shouldShowLoader ? (
+          <KatanaLoader
+            serverReady={false /* it just animates by itself */}
+            error={loadError}
+            onRetry={() => fetchCurrentBalance(isRealGame ? 1 : 0)}
+          />
+        ) : (
+          <>
+            <Suspense fallback={<div className="text-white">Loading Slot…</div>}>
+              <SlotMachine balance={balance} setBalance={setBalance} />
+            </Suspense>
+            <Image
+              src={"/images/avatars/lets-play.png"}
+              alt="Avatar"
+              width={433}
+              height={538}
+              className="absolute bottom-0 right-0 pointer-events-none z-0 w-56 md:w-72 lg:w-96"
+            />
+          </>
+        )}
       </div>
     </>
   );

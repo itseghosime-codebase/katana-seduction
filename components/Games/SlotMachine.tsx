@@ -8,6 +8,7 @@ import AmountSelector from "../ui/AmountSelector";
 import ProgressSlider from "../ui/ProgressSlider";
 import { useSearchParams } from "next/navigation";
 import confetti from "canvas-confetti";
+import Helpers from "../ui/Helpers";
 
 const symbols = [
     "/images/characters/dager.svg",
@@ -94,7 +95,8 @@ function randomUniqueColumn(rows: number, exclude: string[] = []) {
     const available = symbols.filter((s) => !exclude.includes(s));
     if (rows > available.length) {
         const col: string[] = [];
-        for (let r = 0; r < rows; r++) col.push(symbols[Math.floor(Math.random() * symbols.length)]);
+        for (let r = 0; r < rows; r++)
+            col.push(symbols[Math.floor(Math.random() * symbols.length)]);
         return col;
     }
     const pool = [...available];
@@ -107,97 +109,129 @@ function randomUniqueColumn(rows: number, exclude: string[] = []) {
     return col;
 }
 
+function clamp(val: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, val));
+}
+
 function applyWinningPattern(
     rows: number,
     cols: number,
-    pattern: Pattern,
+    _pattern: Pattern,
     winSymbol: string,
-    middleRow: number
+    _middleRow: number // kept for compatibility
 ) {
-    const grid: string[][] = Array.from({ length: rows }, () =>
-        Array.from({ length: cols }, () => "")
-    );
+    // 1) Start from a "losing" grid so there are NO accidental matches
+    const grid = applyLosingGrid(rows, cols); // <-- important change
 
-    for (let c = 0; c < cols; c++) {
-        const col = randomUniqueColumn(rows);
-        for (let r = 0; r < rows; r++) grid[r][c] = col[r];
-    }
-
+    const clusters: { r: number; c: number }[][] = [];
     const patternCells: { r: number; c: number }[] = [];
+    const usedKeys = new Set<string>();
 
-    function mark(r: number, c: number) {
-        if (r >= 0 && r < rows && c >= 0 && c < cols) {
-            grid[r][c] = winSymbol;
+    const dist = (a: { r: number; c: number }, b: { r: number; c: number }) =>
+        Math.sqrt((a.r - b.r) ** 2 + (a.c - b.c) ** 2);
+
+    const isFarFromExistingClusters = (r: number, c: number) => {
+        const p = { r, c };
+        return clusters.every(cluster =>
+            cluster.every(existing => dist(existing, p) > 2.5)
+        );
+    };
+
+    const mark = (r: number, c: number) => {
+        if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+        const key = `${r}-${c}`;
+        grid[r][c] = winSymbol;
+        if (!usedKeys.has(key)) {
+            usedKeys.add(key);
             patternCells.push({ r, c });
         }
+    };
+
+    // create 1–4 scattered clusters of winSymbol
+    const clusterCount = 1 + Math.floor(Math.random() * 4);
+
+    for (let i = 0; i < clusterCount; i++) {
+        let placed = false;
+
+        for (let attempt = 0; attempt < 30 && !placed; attempt++) {
+            const baseR = Math.floor(Math.random() * rows);
+            const baseC = Math.floor(Math.random() * cols);
+
+            if (!isFarFromExistingClusters(baseR, baseC)) continue;
+
+            const shape = Math.floor(Math.random() * 4);
+            const newCluster: { r: number; c: number }[] = [];
+
+            if (shape === 0) {
+                // horizontal 3–5
+                const length = 3 + Math.floor(Math.random() * 3);
+                const startC = clamp(baseC - 2, 0, cols - length);
+                for (let c = startC; c < startC + length; c++) {
+                    newCluster.push({ r: baseR, c });
+                }
+            } else if (shape === 1) {
+                // vertical 3–5
+                const length = 3 + Math.floor(Math.random() * 3);
+                const startR = clamp(baseR - 2, 0, rows - length);
+                for (let r = startR; r < startR + length; r++) {
+                    newCluster.push({ r, c: baseC });
+                }
+            } else if (shape === 2) {
+                // 2×2 or 3×2 block
+                const height = 2 + Math.floor(Math.random() * 2);
+                const width = 2;
+                const startR = clamp(baseR - 1, 0, rows - height);
+                const startC = clamp(baseC - 1, 0, cols - width);
+                for (let r = startR; r < startR + height; r++) {
+                    for (let c = startC; c < startC + width; c++) {
+                        newCluster.push({ r, c });
+                    }
+                }
+            } else {
+                // short diagonal 3–4
+                const length = 3 + Math.floor(Math.random() * 2);
+                const startR = clamp(baseR - 1, 0, rows - length);
+                const startC = clamp(baseC - 1, 0, cols - length);
+                for (let i2 = 0; i2 < length; i2++) {
+                    newCluster.push({ r: startR + i2, c: startC + i2 });
+                }
+            }
+
+            if (newCluster.length < 3) continue;
+            if (
+                !newCluster.every(p =>
+                    clusters.every(cluster =>
+                        cluster.every(existing => dist(existing, p) > 2.2)
+                    )
+                )
+            ) {
+                continue;
+            }
+
+            clusters.push(newCluster);
+            placed = true;
+        }
     }
 
-    switch (pattern) {
-        case "horizontal_3": {
-            const start = Math.floor((cols - 3) / 2);
-            for (let c = start; c < start + 3; c++) mark(middleRow, c);
-            break;
+    // apply all clusters
+    for (const cluster of clusters) {
+        for (const { r, c } of cluster) {
+            mark(r, c);
         }
-        case "horizontal_5": {
-            const start = Math.floor((cols - 5) / 2);
-            for (let c = start; c < start + 5; c++) mark(middleRow, c);
-            break;
-        }
-        case "vertical_3": {
-            const midCol = Math.floor(cols / 2);
-            const start = Math.floor((rows - 3) / 2);
-            for (let r = start; r < start + 3; r++) mark(r, midCol);
-            break;
-        }
-        case "diagonal_main": {
-            const offset = Math.floor((cols - rows) / 2);
-            for (let r = 0; r < rows; r++) {
-                const c = r + offset;
-                mark(r, c);
-            }
-            break;
-        }
-        case "diagonal_rev": {
-            const offset = Math.floor((cols - rows) / 2);
-            for (let r = 0; r < rows; r++) {
-                const c = cols - 1 - (r + offset);
-                mark(r, c);
-            }
-            break;
-        }
-        case "zigzag": {
-            const mid = Math.floor(cols / 2);
-            for (let r = 0; r < rows; r++) {
-                const c = mid + (r % 2 === 0 ? -2 : 2);
-                mark(r, c);
-            }
-            break;
-        }
-        case "vshape": {
-            const mid = Math.floor(cols / 2);
-            for (let r = 0; r < rows; r++) {
-                const left = mid - r;
-                const right = mid + r;
-                mark(r, left);
-                mark(r, right);
-            }
-            break;
-        }
-        case "mega_cross": {
-            const midR = Math.floor(rows / 2);
-            const midC = Math.floor(cols / 2);
-            for (let c = 0; c < cols; c++) mark(midR, c);
-            for (let r = 0; r < rows; r++) mark(r, midC);
-            for (let i = 0; i < Math.min(rows, cols); i++) {
-                mark(i, i);
-                mark(i, cols - 1 - i);
-            }
-            break;
+    }
+
+    // safety: if somehow nothing placed, force simple 3-in-a-row
+    if (patternCells.length === 0) {
+        const r = Math.floor(Math.random() * rows);
+        const startC = Math.max(0, Math.min(cols - 3, Math.floor(cols / 2) - 1));
+        for (let c = startC; c < startC + 3; c++) {
+            mark(r, c);
         }
     }
 
     return { grid, patternCells };
 }
+
 
 function hasContiguousMatch(grid: string[][]) {
     const rows = grid.length;
@@ -227,8 +261,10 @@ function hasContiguousMatch(grid: string[][]) {
         for (let c = 0; c < cols; c++) {
             const v = grid[r][c];
             if (!v) continue;
-            if (r + 1 < rows && c + 1 < cols && grid[r + 1][c + 1] === v) return true;
-            if (r + 1 < rows && c - 1 >= 0 && grid[r + 1][c - 1] === v) return true;
+            if (r + 1 < rows && c + 1 < cols && grid[r + 1][c + 1] === v)
+                return true;
+            if (r + 1 < rows && c - 1 >= 0 && grid[r + 1][c - 1] === v)
+                return true;
         }
     }
 
@@ -275,7 +311,8 @@ function applyLosingGrid(rows: number, cols: number) {
 
 function playSpinTone() {
     try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const ctx = new (window.AudioContext ||
+            (window as any).webkitAudioContext)();
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.type = "sine";
@@ -288,7 +325,10 @@ function playSpinTone() {
             o.frequency.setValueAtTime(660, ctx.currentTime);
         }, 80);
         setTimeout(() => {
-            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+            g.gain.exponentialRampToValueAtTime(
+                0.0001,
+                ctx.currentTime + 0.25
+            );
             o.stop(ctx.currentTime + 0.3);
         }, 250);
     } catch (e) { }
@@ -296,7 +336,8 @@ function playSpinTone() {
 
 function playWinTone(power: number) {
     try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const ctx = new (window.AudioContext ||
+            (window as any).webkitAudioContext)();
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         const base = 220 + (power / 100) * 880;
@@ -306,10 +347,27 @@ function playWinTone(power: number) {
         o.connect(g);
         g.connect(ctx.destination);
         o.start();
-        setTimeout(() => o.frequency.linearRampToValueAtTime(base * 1.25, ctx.currentTime + 0.12), 120);
-        setTimeout(() => o.frequency.linearRampToValueAtTime(base * 1.5, ctx.currentTime + 0.28), 280);
+        setTimeout(
+            () =>
+                o.frequency.linearRampToValueAtTime(
+                    base * 1.25,
+                    ctx.currentTime + 0.12
+                ),
+            120
+        );
+        setTimeout(
+            () =>
+                o.frequency.linearRampToValueAtTime(
+                    base * 1.5,
+                    ctx.currentTime + 0.28
+                ),
+            280
+        );
         setTimeout(() => {
-            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+            g.gain.exponentialRampToValueAtTime(
+                0.0001,
+                ctx.currentTime + 0.6
+            );
             o.stop(ctx.currentTime + 0.65);
         }, 600);
     } catch (e) { }
@@ -317,7 +375,8 @@ function playWinTone(power: number) {
 
 function playLoseTone() {
     try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const ctx = new (window.AudioContext ||
+            (window as any).webkitAudioContext)();
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.type = "sawtooth";
@@ -327,7 +386,10 @@ function playLoseTone() {
         g.connect(ctx.destination);
         o.start();
         o.frequency.linearRampToValueAtTime(220, ctx.currentTime + 0.18);
-        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+        g.gain.exponentialRampToValueAtTime(
+            0.0001,
+            ctx.currentTime + 0.22
+        );
         o.stop(ctx.currentTime + 0.24);
     } catch (e) { }
 }
@@ -356,13 +418,18 @@ type SpinResponse = {
     pattern?: Pattern | null;
 };
 
-export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
+export default function SlotMachine({
+    balance,
+    setBalance,
+}: SlotMachineProps) {
     const rows = 5;
     const cols = 7;
     const middleRow = Math.floor(rows / 2);
 
     const [grid, setGrid] = useState<string[][]>(() =>
-        Array.from({ length: rows }, () => Array.from({ length: cols }, () => symbols[0]))
+        Array.from({ length: rows }, () =>
+            Array.from({ length: cols }, () => symbols[0])
+        )
     );
     const [spinning, setSpinning] = useState(false);
     const intervals = useRef<(number | null)[]>([]);
@@ -378,29 +445,57 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
 
     const [lastWinCredits, setLastWinCredits] = useState<number | null>(null);
     const [lastWinSymbol, setLastWinSymbol] = useState<string | null>(null);
-    const [lastWinningPower, setLastWinningPower] = useState<number | null>(null);
+    const [lastWinningPower, setLastWinningPower] =
+        useState<number | null>(null);
     const [winPatternUsed, setWinPatternUsed] = useState<Pattern | null>(null);
     const [showResultBanner, setShowResultBanner] = useState(false);
     const [lastOutcome, setLastOutcome] = useState<Outcome>(null);
     const [networkError, setNetworkError] = useState<string | null>(null);
 
     const [winningCells, setWinningCells] = useState<Set<string>>(new Set());
-    const [idleHighlightCell, setIdleHighlightCell] = useState<string | null>(null);
+    const [idleHighlightCell, setIdleHighlightCell] = useState<string | null>(
+        null
+    );
 
     const confettiCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const confettiInstanceRef = useRef<ConfettiFn | null>(null);
 
-    const [shakeOffset, setShakeOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [shakeOffset, setShakeOffset] = useState<{ x: number; y: number }>({
+        x: 0,
+        y: 0,
+    });
     const shakeIntervalRef = useRef<number | null>(null);
 
     const [aberrationFlash, setAberrationFlash] = useState(false);
+
+    const [soundOn, setSoundOn] = useState(true);
+
+    const playSpinSound = () => {
+        if (!soundOn) return;
+        playSpinTone();
+    };
+
+    const playWinSound = (power: number) => {
+        if (!soundOn) return;
+        playWinTone(power);
+    };
+
+    const playLoseSound = () => {
+        if (!soundOn) return;
+        playLoseTone();
+    };
+
 
     const autoSpinRef = useRef(false);
     const spinningRef = useRef(false);
     const forceStopRef = useRef(false);
     const canSpinRef = useRef(true);
 
-    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const [isDropping, setIsDropping] = useState(false);
+    const [isClearing, setIsClearing] = useState(false);
+
+    const wait = (ms: number) =>
+        new Promise<void>((resolve) => setTimeout(resolve, ms));
 
     useEffect(() => {
         autoSpinRef.current = autoSpinning;
@@ -433,7 +528,9 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 setNetworkError(null);
             } catch (err) {
                 console.error("fetchMachineStatus error:", err);
-                setNetworkError("No network connection. We can't reach the game server right now.");
+                setNetworkError(
+                    "No network connection. We can't reach the game server right now."
+                );
             }
         };
 
@@ -481,7 +578,13 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
     }, []);
 
     useEffect(() => {
-        const isIdle = !spinning && !autoSpinning && lastOutcome !== "win";
+        const isIdle =
+            !spinning &&
+            !autoSpinning &&
+            !isClearing &&
+            !isDropping &&
+            lastOutcome !== "win";
+
         if (!isIdle) {
             setIdleHighlightCell(null);
             return;
@@ -493,12 +596,14 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
             const key = `${r}-${c}`;
             setIdleHighlightCell(key);
             setTimeout(() => {
-                setIdleHighlightCell((current) => (current === key ? null : current));
+                setIdleHighlightCell((current) =>
+                    current === key ? null : current
+                );
             }, 600);
         }, 8000);
 
         return () => window.clearInterval(interval);
-    }, [spinning, autoSpinning, lastOutcome]);
+    }, [spinning, autoSpinning, lastOutcome, isClearing, isDropping]);
 
     const triggerScreenShake = (power: number) => {
         const duration = 320 + (power / 100) * 320;
@@ -535,53 +640,6 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         setTimeout(() => setAberrationFlash(false), flashDuration);
     };
 
-    const startColumnSpin = (colIndex: number) => {
-        playSpinTone();
-        return window.setInterval(() => {
-            setGrid((prev) => {
-                const copy = prev.map((row) => [...row]);
-                const newCol = randomUniqueColumn(rows);
-                for (let r = 0; r < rows; r++) copy[r][colIndex] = newCol[r];
-                return copy;
-            });
-        }, 55 + Math.floor(Math.random() * 30));
-    };
-
-    const stopColumnsSmoothly = async (finalGrid: string[][], baseDelay = 140) => {
-        for (let c = 0; c < cols; c++) {
-            if (intervals.current[c]) {
-                clearInterval(intervals.current[c]!);
-                intervals.current[c] = null;
-            }
-
-            for (let r = 0; r < rows; r++) {
-                if (forceStopRef.current) {
-                    setGrid((prev) => {
-                        const copy = prev.map((row) => [...row]);
-                        for (let cc = c; cc < cols; cc++) {
-                            for (let rr = 0; rr < rows; rr++) {
-                                copy[rr][cc] = finalGrid[rr][cc];
-                            }
-                        }
-                        return copy;
-                    });
-                    return;
-                }
-
-                setGrid((prev) => {
-                    const copy = prev.map((row) => [...row]);
-                    copy[r][c] = finalGrid[r][c];
-                    return copy;
-                });
-
-                await new Promise((res) => setTimeout(res, 18));
-            }
-
-            const jitter = Math.floor(Math.random() * 60) - 20;
-            await new Promise((res) => setTimeout(res, baseDelay + jitter));
-        }
-    };
-
     const animateToPower = (target: number, duration = 700) => {
         let start: number | null = null;
         const initial = progress;
@@ -596,7 +654,8 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
     };
 
     const triggerConfettiByPower = (power: number) => {
-        const instance = confettiInstanceRef.current ?? (confetti as unknown as ConfettiFn);
+        const instance =
+            confettiInstanceRef.current ?? ((confetti as unknown) as ConfettiFn);
         if (!instance) return;
 
         const intensity = Math.max(0.3, power / 100);
@@ -686,7 +745,10 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 particleCount: 4 + Math.floor(4 * intensity),
                 startVelocity: 15 + 10 * intensity,
                 spread: 20,
-                origin: { x: 0.5 + (Math.random() - 0.5) * 0.3, y: 0.1 },
+                origin: {
+                    x: 0.5 + (Math.random() - 0.5) * 0.3,
+                    y: 0.1,
+                },
                 gravity: 1.2,
                 ticks: 120,
                 scalar: 0.6 + intensity * 0.3,
@@ -729,7 +791,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
 
         spinningRef.current = true;
         setSpinning(true);
-
+        playSpinSound();
         setShowResultBanner(false);
         setLastWinCredits(null);
         setLastWinningPower(null);
@@ -743,7 +805,9 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         let data: SpinResponse;
 
         try {
-            const res = await fetch(`/api/slot/play?real=${isReal ? 1 : 0}&bet_amount=${betAmount}`);
+            const res = await fetch(
+                `/api/slot/play?real=${isReal ? 1 : 0}&bet_amount=${betAmount}`
+            );
             if (!res.ok) throw new Error(`${res.status}`);
             data = (await res.json()) as SpinResponse;
         } catch (err) {
@@ -755,15 +819,6 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         }
 
         canSpinRef.current = data.canSpin;
-
-        intervals.current.forEach((i) => i && clearInterval(i));
-        intervals.current = [];
-
-        for (let i = 0; i < cols; i++) {
-            setTimeout(() => {
-                intervals.current[i] = startColumnSpin(i);
-            }, i * 90);
-        }
 
         try {
             const winningPowerRaw = data.winningPower ?? 0;
@@ -785,73 +840,111 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                     winSymbol,
                     middleRow
                 );
-                const positions = new Set<string>();
-                for (const cell of patternCells) {
-                    positions.add(`${cell.r}-${cell.c}`);
-                }
-                setWinningCells(positions);
                 finalGrid = g;
                 patternCells = cells;
             } else {
                 finalGrid = applyLosingGrid(rows, cols);
             }
 
-            await stopColumnsSmoothly(finalGrid);
-            await wait(isWin && winningPower >= 80 ? 220 : 140);
+            // 1) clear old symbols (exit)
+            const EXIT_DURATION = 1200; // ms – each cell's drop duration
+            const DROP_DURATION = 600; // ms – entry duration
+            const GAP_BETWEEN = 800; // ms – pause while grid is empty
 
-            setBalance(typeof data.newBalance === "number" ? data.newBalance : balance);
+            setIsClearing(true);
 
-            if (isWin) {
-                const positions = new Set<string>();
-                for (const cell of patternCells) {
-                    positions.add(`${cell.r}-${cell.c}`);
-                }
-                setWinningCells(positions);
+            setTimeout(() => {
+                // end exit animation
+                setIsClearing(false);
 
-                setLastWinCredits(typeof data.bananaWon === "number" ? data.bananaWon : 0);
-                setLastWinSymbol(winSymbol);
-                setLastWinningPower(winningPower);
-                setWinPatternUsed(pattern);
-                setLastOutcome("win");
-                setShowResultBanner(true);
+                // 2) HARD CLEAR: remove all symbols (empty grid)
+                setGrid(
+                    Array.from({ length: rows }, () =>
+                        Array.from({ length: cols }, () => "")
+                    )
+                );
 
-                animateToPower(winningPower);
-                playWinTone(winningPower);
-                triggerConfettiByPower(winningPower);
+                // gap while box is empty
+                setTimeout(() => {
+                    // 3) start drop of new grid
+                    setIsDropping(true);
+                    setGrid(finalGrid);
 
-                if (winningPower >= 85) {
-                    triggerScreenShake(winningPower);
-                    triggerAberrationFlash(winningPower);
-                }
-            } else {
-                setWinningCells(new Set());
-                setLastOutcome("lose");
-                setShowResultBanner(true);
-                animateToPower(0);
-                playLoseTone();
-            }
+                    setTimeout(() => {
+                        // 4) after drop lands, resolve result
+                        setIsDropping(false);
+
+                        setBalance(
+                            typeof data.newBalance === "number"
+                                ? data.newBalance
+                                : balance
+                        );
+
+                        if (isWin) {
+                            const positions = new Set<string>();
+                            for (const cell of patternCells) {
+                                positions.add(`${cell.r}-${cell.c}`);
+                            }
+                            setWinningCells(positions);
+
+
+                            setLastWinCredits(
+                                typeof data.bananaWon === "number" ? data.bananaWon : 0
+                            );
+                            setLastWinSymbol(winSymbol);
+                            setLastWinningPower(winningPower);
+                            setWinPatternUsed(pattern);
+                            setLastOutcome("win");
+                            setShowResultBanner(true);
+
+                            animateToPower(winningPower);
+                            playWinSound(winningPower);
+                            triggerConfettiByPower(winningPower);
+
+                            if (winningPower >= 85) {
+                                triggerScreenShake(winningPower);
+                                triggerAberrationFlash(winningPower);
+                            }
+                        } else {
+                            setWinningCells(new Set());
+                            setLastOutcome("lose");
+                            setShowResultBanner(false);
+                            animateToPower(0);
+                            playLoseSound();
+                        }
+
+                        // spin visually done now
+                        spinningRef.current = false;
+                        setSpinning(false);
+
+                        // chain AUTOSPIN after a pause
+                        if (
+                            autoSpinRef.current &&
+                            canSpinRef.current &&
+                            !forceStopRef.current
+                        ) {
+                            setTimeout(() => {
+                                if (autoSpinRef.current && !spinningRef.current) {
+                                    spin();
+                                }
+                            }, AUTO_SPIN_BREAK_MS);
+                        }
+                    }, DROP_DURATION);
+                }, GAP_BETWEEN);
+            }, EXIT_DURATION);
         } catch (err) {
             console.error("spin error:", err);
             intervals.current.forEach((i) => i && clearInterval(i));
             intervals.current = [];
             canSpinRef.current = false;
-            setNetworkError("No network connection. Spin failed – please check your internet and try again.");
+            setNetworkError(
+                "No network connection. Spin failed – please check your internet and try again."
+            );
+            spinningRef.current = false;
+            setSpinning(false);
         }
-
-        intervals.current.forEach((i) => i && clearInterval(i));
-        intervals.current = [];
 
         forceStopRef.current = false;
-
-        spinningRef.current = false;
-        setSpinning(false);
-
-        if (autoSpinRef.current && canSpinRef.current) {
-            await wait(AUTO_SPIN_BREAK_MS);
-            if (!autoSpinRef.current) return;
-            if (spinningRef.current) return;
-            spin();
-        }
     };
 
     const handleAutoSpin = () => {
@@ -861,7 +954,9 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         }
 
         if (networkError) {
-            alert("Network error. AUTOSPIN cannot start until the connection is restored.");
+            alert(
+                "Network error. AUTOSPIN cannot start until the connection is restored."
+            );
             return;
         }
 
@@ -887,6 +982,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         const usd = credits / 100;
         return `$${usd.toFixed(2)}`;
     };
+
     const cellClass = (
         _cell: string,
         isWinningCell: boolean,
@@ -894,13 +990,13 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
     ) => {
         return [
             "flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 lg:w-16 lg:h-16",
-            "overflow-hidden relative transition-transform duration-200",
-            isWinningCell ? "scale-[1.1] z-30 shadow-[0_0_28px_rgba(255,255,255,0.45)]" : "",
+            "relative transition-transform duration-200",
+            isWinningCell ? "scale-[1.1] z-30 animate-pulse" : "",
             isIdleGlow && !isWinningCell ? "opacity-80" : "",
         ].join(" ");
     };
 
-    const isIdle = !spinning && !autoSpinning;
+    const isIdle = !spinning && !autoSpinning && !isClearing && !isDropping;
 
     const resultMainText = () => {
         if (!lastOutcome) return "";
@@ -911,14 +1007,16 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
         if (lastOutcome === "win" && lastWinCredits !== null) {
             return `You won ${creditsToUSD(lastWinCredits)} (${lastWinCredits} credits)`;
         }
+
         if (lastOutcome === "lose") {
-            return `You lost ${creditsToUSD(betAmount)} (${betAmount} credits)`;
+            return `Better luck next time!`;
         }
+
         return "";
     };
 
     return (
-        <div className="relative z-20">
+        <div className="relative z-20 w-full flex flex-col items-start">
             {networkError && (
                 <div className="mb-3 px-4 py-3 rounded-lg bg-red-600/20 border border-red-500/60 text-red-200 text-sm flex items-center gap-2 max-w-2xl mx-auto">
                     <span className="inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse" />
@@ -926,84 +1024,121 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 </div>
             )}
 
+            <Helpers
+                sound={soundOn}
+                onToggleSound={() => setSoundOn((prev) => !prev)}
+            />
+
             <div className="flex flex-col md:flex-row gap-6 items-center justify-center">
+
                 <div
-                    className="relative w-full max-w-4xl"
+                    className={
+                        "relative w-full max-w-4xl transition-transform duration-300 " +
+                        (spinning ? "slot-zoom" : "")
+                    }
                     style={{
                         transform: `translate(${shakeOffset.x}px, ${shakeOffset.y}px)`,
                         transition: "transform 40ms ease-out",
                     }}
                 >
-                    <div
-                        className={
-                            "relative z-5 grid grid-cols-7 gap-3 lg:gap-4 py-8 lg:py-12 px-6 md:px-8 lg:px-14 " +
-                            "overflow-hidden" +
-                            "transition-transform duration-200 " +
-                            (spinning ? "scale-[0.98] opacity-80" : "") +
-                            (isIdle ? " idle-breathe" : "")
-                        }
-                    >
-                        {grid.map((row, rIdx) =>
-                            row.map((cell, cIdx) => {
-                                const key = `${rIdx}-${cIdx}`;
-                                const isWinningCell =
-                                    lastOutcome === "win" && winningCells.has(key);
-                                const isIdleGlow =
-                                    isIdle && !lastOutcome && idleHighlightCell === key;
+                    <div className={"relative z-5 py-6 lg:py-10 px-4 md:px-6 lg:px-12 "}>
+                        <div
+                            className={
+                                "grid grid-cols-7 gap-3 lg:gap-4 relative p-2 " +
+                                "overflow-hidden transition-transform duration-200 " +
+                                (isIdle ? " idle-breathe " : "")
+                            }
+                        >
+                            {grid.map((row, rIdx) =>
+                                row.map((cell, cIdx) => {
+                                    const key = `${rIdx}-${cIdx}`;
+                                    const isWinningCell =
+                                        lastOutcome === "win" && winningCells.has(key);
+                                    const isIdleGlow =
+                                        isIdle && !lastOutcome && idleHighlightCell === key;
 
-                                return (
-                                    <div
-                                        key={key}
-                                        className={cellClass(cell, isWinningCell, isIdleGlow)}
-                                        style={{
-                                            transitionDelay: `${(cIdx * rows + rIdx) * 8}ms`,
-                                        }}
-                                    >
-                                        <div
-                                            className={
-                                                "relative w-full h-full flex items-center justify-center rounded-full overflow-hidden " +
-                                                "bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 " +
-                                                (!isWinningCell && spinning ? " opacity-90" : "")
-                                            }
-                                        >
-                                            {isWinningCell && (
-                                                <>
-                                                    <div
-                                                        className="
-                    pointer-events-none absolute inset-[-3px] rounded-full
-                    border-2 border-[#FF1EBE]
-                    shadow-[0_0_24px_rgba(255,30,190,0.85)]
-                    animate-pulse
-                "
-                                                    />
-                                                    <div
-                                                        className="
-                    pointer-events-none absolute inset-0 rounded-full
-                    bg-radial from-[#FF1EBE33] via-transparent to-transparent
-                    mix-blend-screen
-                "
-                                                    />
-                                                </>
-                                            )}
+                                    return (
+                                        <div key={key} className={cellClass(cell, isWinningCell, isIdleGlow)}>
+                                            <div className="relative w-full h-full rounded-full">
 
-                                            <Image
-                                                src={symbols.includes(cell) ? cell : symbols[0]}
-                                                alt="Symbol"
-                                                width={70}
-                                                height={70}
-                                                className="object-contain h-full w-full select-none pointer-events-none relative z-10"
-                                                draggable={false}
-                                            />
+                                                {/* Symbol wrapper */}
+                                                <div
+                                                    className={
+                                                        "relative w-full h-full flex items-center justify-center rounded-full " +
+                                                        (isWinningCell ? "slot-win-pop " : "") +
+                                                        "relative w-full h-full flex items-center justify-center z-10 " +
+                                                        (isClearing ? " slot-cell-exit" : "") +
+                                                        (isDropping ? " slot-cell-drop" : "")
+                                                    }
+                                                    style={
+                                                        isClearing || isDropping
+                                                            ? (() => {
+                                                                const COL_STAGGER = 80;
+                                                                const ROW_STAGGER = 35;
+                                                                const base = COL_STAGGER * cIdx + ROW_STAGGER * rIdx;
+
+                                                                return {
+                                                                    animationDelay: `${base}ms`,
+                                                                    transform: isDropping ? "translateY(-120vh)" : "translateY(0%)",
+                                                                };
+                                                            })()
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {cell && symbols.includes(cell) && (
+                                                        <Image
+                                                            src={cell}
+                                                            alt="Symbol"
+                                                            width={70}
+                                                            height={70}
+                                                            className={"object-contain h-full w-full select-none pointer-events-none rounded-full overflow-hidden bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 " +
+                                                                (spinning ? "slot-symbol-blur" : "")
+                                                            }
+                                                            draggable={false}
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                {/* Background frame (appears after drop) */}
+                                                <div
+                                                    className={
+                                                        "absolute inset-0 rounded-full " +
+                                                        "transition-opacity duration-150 z-0 " +
+                                                        (isClearing || isDropping ? "opacity-0" : "opacity-100")
+                                                    }
+                                                />
+
+                                                {/* Winning effect */}
+                                                {isWinningCell && (
+                                                    <>
+                                                        <div
+                                                            className="
+            pointer-events-none absolute inset-[-3px] rounded-full z-20
+            border-2 border-[#FF1EBE]
+            shadow-[0_0_24px_rgba(255,30,190,0.85)]
+            animate-pulse
+          "
+                                                        />
+                                                        <div
+                                                            className="
+            pointer-events-none absolute inset-0 rounded-full z-20
+            bg-radial from-[#FF1EBE33] via-transparent to-transparent
+            mix-blend-screen
+          "
+                                                        />
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })
-                        )}
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
 
                     <canvas
                         ref={confettiCanvasRef}
-                        className="pointer-events-none absolute inset-0 z-30"
+                        className="pointer-events-none absolute inset-0 z-30 w-full"
                     />
 
                     {aberrationFlash && (
@@ -1033,7 +1168,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                         }
                     />
 
-                    {showResultBanner && lastOutcome && (
+                    {showResultBanner && lastOutcome === "win" && (
                         <div className="absolute inset-x-4.5 md:inset-x-5 lg:inset-x-8 bottom-1/2 translate-y-1/2 z-50 pointer-events-none">
                             <div
                                 className={
@@ -1046,7 +1181,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                                 </div>
 
                                 {resultSubText() && (
-                                    <div className="mt-1 text-sm md:text-base opacity-90">
+                                    <div className="mt-1 text-sm md:text-base hidden opacity-90">
                                         {resultSubText()}
                                     </div>
                                 )}
@@ -1082,7 +1217,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                     <AmountSelector
                         min={minBet}
                         max={maxBet}
-                        step={1}
+                        step={5}
                         value={betAmount}
                         onChange={(val) => setBetAmount(val)}
                         disabled={spinning || autoSpinning}
@@ -1090,7 +1225,7 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 </div>
             </div>
 
-            <div className="mt-4 ">
+            <div className="mt-4 w-full max-w-2xl">
                 <ProgressSlider progress={progress} />
             </div>
 
@@ -1098,7 +1233,9 @@ export default function SlotMachine({ balance, setBalance }: SlotMachineProps) {
                 <div>RTP: 96.3%</div>
                 <div>
                     {lastWinCredits !== null
-                        ? `Last win: ${lastWinCredits} credits (${creditsToUSD(lastWinCredits)})`
+                        ? `Last win: ${lastWinCredits} credits (${creditsToUSD(
+                            lastWinCredits
+                        )})`
                         : "No recent win"}
                 </div>
                 <div>{winPatternUsed ? `Pattern: ${winPatternUsed}` : ""}</div>
