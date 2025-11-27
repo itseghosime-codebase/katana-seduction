@@ -121,8 +121,7 @@ export default function KatanaGame() {
     <>
       {/* HEADER */}
       <div
-        className={`flex flex-wrap gap-4 items-center w-full justify-center ${balance ? "md:justify-between" : ""
-          } bg-primary py-3 px-4 md:px-10`}
+        className={`flex flex-wrap gap-4 items-center w-full justify-center ${!shouldShowLoader && balance ? "md:justify-between" : ""} bg-primary py-3 px-4 md:px-10`}
       >
         <div className="flex items-center gap-3">
           <Image
