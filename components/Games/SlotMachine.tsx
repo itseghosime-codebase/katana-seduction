@@ -311,35 +311,59 @@ function applyLosingGrid(rows: number, cols: number) {
 
 function playWinTone(power: number) {
     try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const ctx = new AudioCtx();
 
-        const tones = [440, 660, 880]; // A major triad
-        const duration = 0.12;
-        const g = ctx.createGain();
+        // MAIN OSC
+        const osc = ctx.createOscillator();
+        osc.type = "sawtooth"; // richer + stronger presence
 
-        g.gain.setValueAtTime(0.0001, ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.25 + power / 700, ctx.currentTime + 0.05);
+        // SPARKLE OSC
+        const shimmer = ctx.createOscillator();
+        shimmer.type = "triangle";
 
-        tones.forEach((freq, i) => {
-            const osc = ctx.createOscillator();
-            osc.type = "square"; // punchy
-            osc.frequency.value = freq + power * 3;
+        const gain = ctx.createGain();
 
-            osc.connect(g);
-            g.connect(ctx.destination);
+        // Start quiet → rise → decay
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(
+            0.35 + power * 0.003,       // louder for bigger wins
+            ctx.currentTime + 0.12
+        );
+        gain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            ctx.currentTime + 1.2       // gradual fade-out
+        );
 
-            const start = ctx.currentTime + i * duration;
-            const end = start + duration;
+        // Frequency sweep
+        const startFreq = 450 + power * 2;    // bright enough to cut through bg
+        const endFreq = 1600 + power * 4;   // long cinematic peak
 
-            osc.start(start);
-            osc.stop(end);
-        });
+        osc.frequency.setValueAtTime(startFreq, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(
+            endFreq,
+            ctx.currentTime + 0.9        // long sweep
+        );
 
-        // Fade out tail
-        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + tones.length * duration + 0.15);
+        // Shimmer layer (adds sparkle)
+        shimmer.frequency.setValueAtTime(startFreq * 2, ctx.currentTime);
+        shimmer.frequency.exponentialRampToValueAtTime(
+            endFreq * 1.4,
+            ctx.currentTime + 0.9
+        );
+
+        osc.connect(gain);
+        shimmer.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        shimmer.start();
+
+        osc.stop(ctx.currentTime + 1.25);
+        shimmer.stop(ctx.currentTime + 1.25);
+
     } catch (e) { }
 }
-
 
 
 function playLoseTone() {
@@ -445,8 +469,26 @@ export default function SlotMachine({
 
     const playWinSound = (power: number) => {
         if (!soundOn) return;
+
+        const bg = bgAudioRef.current;
+        let originalVolume: number | null = null;
+
+        if (bg) {
+            // save current volume and duck it
+            originalVolume = bg.volume;
+            bg.volume = originalVolume * 0.35; // keep music but much lower during win
+        }
+
         playWinTone(power);
+
+        // restore bg volume after the win tone finishes
+        setTimeout(() => {
+            if (bg && originalVolume !== null) {
+                bg.volume = originalVolume;
+            }
+        }, 550); // slightly longer than playWinTone duration
     };
+
 
     const playLoseSound = () => {
         if (!soundOn) return;
@@ -461,6 +503,9 @@ export default function SlotMachine({
 
     const [isDropping, setIsDropping] = useState(false);
     const [isClearing, setIsClearing] = useState(false);
+
+    const wait = (ms: number) =>
+        new Promise<void>((resolve) => setTimeout(resolve, ms));
 
     useEffect(() => {
         autoSpinRef.current = autoSpinning;
@@ -576,6 +621,7 @@ export default function SlotMachine({
 
         // Ensure it loops
         bg.loop = true;
+        bg.volume = 0.6;
 
         if (soundOn) {
             // Try to play background music
@@ -609,18 +655,21 @@ export default function SlotMachine({
         const isDroppingPhase = isClearing || isDropping;
 
         // ensure it's not looping forever on its own
-        spinAudio.loop = false;
+        spinAudio.loop = true;
 
         if (isDroppingPhase && soundOn) {
             try {
+                // if it was mid-play from previous phase you can choose to NOT reset time
+                // but restarting usually feels tighter to the animation:
                 spinAudio.currentTime = 0;
                 spinAudio.play();
             } catch (e) {
                 console.warn("Spin audio play blocked:", e);
             }
         } else {
-            // spinAudio.pause();
-            // spinAudio.currentTime = 0;
+            // either not in a drop phase, or sound muted -> stop & reset
+            spinAudio.pause();
+            spinAudio.currentTime = 0;
         }
     }, [isClearing, isDropping, soundOn]);
 
@@ -1044,15 +1093,16 @@ export default function SlotMachine({
             )}
 
             {/* 🔊 Audio elements (hidden) */}
+
             <audio
                 ref={bgAudioRef}
-                src="/sounds/game_sound.mp3"
+                src="/sounds/game_sound.mp3"   // change to your real path
                 preload="auto"
             />
 
             <audio
                 ref={spinAudioRef}
-                src="/sounds/play_sound.mp3"
+                src="/sounds/play_sound.mp3"   // change to your real path
                 preload="auto"
             />
 
@@ -1204,7 +1254,7 @@ export default function SlotMachine({
                         <div className="absolute inset-x-4.5 md:inset-x-5 lg:inset-x-8 bottom-1/2 translate-y-1/2 z-50 pointer-events-none">
                             <div
                                 className={
-                                    "px-6 py-4 min-h-20 bg-[#340F72] text-[#D58EFF] justify-center shadow-[0_0_40px_rgba(213,142,255,0.25)] " +
+                                    "px-6 py-4 min-h-20 bg-[#340F72]/80 text-[#D58EFF] justify-center shadow-[0_0_40px_rgba(213,142,255,0.25)] " +
                                     "flex flex-col items-center animate-win-banner "
                                 }
                             >

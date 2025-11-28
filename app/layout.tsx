@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import "./globals.css";
-import Image from "next/image";
+import SideContent from "@/components/ui/SideContent";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -30,6 +30,9 @@ export default function RootLayout({
         {/* Main Content */}
         <main className="relative z-20 w-full max-w-[1450px] mx-auto flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 lg:p-12 xl:p-14">
           {children}
+          <div className="fixed z-90">
+            <SideContent />
+          </div>
         </main>
       </body>
     </html>
