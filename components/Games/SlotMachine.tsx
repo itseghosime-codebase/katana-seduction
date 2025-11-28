@@ -309,69 +309,38 @@ function applyLosingGrid(rows: number, cols: number) {
     return fallback;
 }
 
-function playSpinTone() {
+function playWinTone(power: number) {
     try {
-        const ctx = new (window.AudioContext ||
-            (window as any).webkitAudioContext)();
-        const o = ctx.createOscillator();
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+        const tones = [440, 660, 880]; // A major triad
+        const duration = 0.12;
         const g = ctx.createGain();
-        o.type = "sine";
-        o.frequency.value = 440;
-        g.gain.value = 0.02;
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.start();
-        setTimeout(() => {
-            o.frequency.setValueAtTime(660, ctx.currentTime);
-        }, 80);
-        setTimeout(() => {
-            g.gain.exponentialRampToValueAtTime(
-                0.0001,
-                ctx.currentTime + 0.25
-            );
-            o.stop(ctx.currentTime + 0.3);
-        }, 250);
+
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.25 + power / 700, ctx.currentTime + 0.05);
+
+        tones.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            osc.type = "square"; // punchy
+            osc.frequency.value = freq + power * 3;
+
+            osc.connect(g);
+            g.connect(ctx.destination);
+
+            const start = ctx.currentTime + i * duration;
+            const end = start + duration;
+
+            osc.start(start);
+            osc.stop(end);
+        });
+
+        // Fade out tail
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + tones.length * duration + 0.15);
     } catch (e) { }
 }
 
-function playWinTone(power: number) {
-    try {
-        const ctx = new (window.AudioContext ||
-            (window as any).webkitAudioContext)();
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        const base = 220 + (power / 100) * 880;
-        o.type = "triangle";
-        o.frequency.value = base;
-        g.gain.value = 0.02 + (power / 100) * 0.08;
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.start();
-        setTimeout(
-            () =>
-                o.frequency.linearRampToValueAtTime(
-                    base * 1.25,
-                    ctx.currentTime + 0.12
-                ),
-            120
-        );
-        setTimeout(
-            () =>
-                o.frequency.linearRampToValueAtTime(
-                    base * 1.5,
-                    ctx.currentTime + 0.28
-                ),
-            280
-        );
-        setTimeout(() => {
-            g.gain.exponentialRampToValueAtTime(
-                0.0001,
-                ctx.currentTime + 0.6
-            );
-            o.stop(ctx.currentTime + 0.65);
-        }, 600);
-    } catch (e) { }
-}
+
 
 function playLoseTone() {
     try {
@@ -466,14 +435,13 @@ export default function SlotMachine({
     });
     const shakeIntervalRef = useRef<number | null>(null);
 
+    const bgAudioRef = useRef<HTMLAudioElement | null>(null);
+    const spinAudioRef = useRef<HTMLAudioElement | null>(null);
+
     const [aberrationFlash, setAberrationFlash] = useState(false);
 
     const [soundOn, setSoundOn] = useState(true);
 
-    const playSpinSound = () => {
-        if (!soundOn) return;
-        playSpinTone();
-    };
 
     const playWinSound = (power: number) => {
         if (!soundOn) return;
@@ -493,9 +461,6 @@ export default function SlotMachine({
 
     const [isDropping, setIsDropping] = useState(false);
     const [isClearing, setIsClearing] = useState(false);
-
-    const wait = (ms: number) =>
-        new Promise<void>((resolve) => setTimeout(resolve, ms));
 
     useEffect(() => {
         autoSpinRef.current = autoSpinning;
@@ -604,6 +569,61 @@ export default function SlotMachine({
 
         return () => window.clearInterval(interval);
     }, [spinning, autoSpinning, lastOutcome, isClearing, isDropping]);
+
+    useEffect(() => {
+        const bg = bgAudioRef.current;
+        if (!bg) return;
+
+        // Ensure it loops
+        bg.loop = true;
+
+        if (soundOn) {
+            // Try to play background music
+            const play = async () => {
+                try {
+                    await bg.play();
+                } catch (e) {
+                    console.warn("Background music play blocked by browser:", e);
+                }
+            };
+            play();
+        } else {
+            // Mute & reset when sound is off
+            bg.pause();
+            bg.currentTime = 0;
+        }
+
+        if (!soundOn) {
+            const spin = spinAudioRef.current;
+            if (spin) {
+                spin.pause();
+                spin.currentTime = 0;
+            }
+        }
+    }, [soundOn]);
+
+    useEffect(() => {
+        const spinAudio = spinAudioRef.current;
+        if (!spinAudio) return;
+
+        const isDroppingPhase = isClearing || isDropping;
+
+        // ensure it's not looping forever on its own
+        spinAudio.loop = false;
+
+        if (isDroppingPhase && soundOn) {
+            try {
+                spinAudio.currentTime = 0;
+                spinAudio.play();
+            } catch (e) {
+                console.warn("Spin audio play blocked:", e);
+            }
+        } else {
+            // spinAudio.pause();
+            // spinAudio.currentTime = 0;
+        }
+    }, [isClearing, isDropping, soundOn]);
+
 
     const triggerScreenShake = (power: number) => {
         const duration = 320 + (power / 100) * 320;
@@ -791,7 +811,6 @@ export default function SlotMachine({
 
         spinningRef.current = true;
         setSpinning(true);
-        playSpinSound();
         setShowResultBanner(false);
         setLastWinCredits(null);
         setLastWinningPower(null);
@@ -1024,6 +1043,19 @@ export default function SlotMachine({
                 </div>
             )}
 
+            {/* 🔊 Audio elements (hidden) */}
+            <audio
+                ref={bgAudioRef}
+                src="/sounds/game_sound.mp3"
+                preload="auto"
+            />
+
+            <audio
+                ref={spinAudioRef}
+                src="/sounds/play_sound.mp3"
+                preload="auto"
+            />
+
             <Helpers
                 sound={soundOn}
                 onToggleSound={() => setSoundOn((prev) => !prev)}
@@ -1091,7 +1123,7 @@ export default function SlotMachine({
                                                             alt="Symbol"
                                                             width={70}
                                                             height={70}
-                                                            className={"object-contain h-full w-full select-none pointer-events-none rounded-full overflow-hidden bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 " 
+                                                            className={"object-contain h-full w-full select-none pointer-events-none rounded-full overflow-hidden bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 "
                                                                 // + (spinning ? "slot-symbol-blur" : "")
                                                             }
                                                             draggable={false}
