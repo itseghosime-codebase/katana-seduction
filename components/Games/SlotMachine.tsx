@@ -1091,8 +1091,8 @@ export default function SlotMachine({
                                                             alt="Symbol"
                                                             width={70}
                                                             height={70}
-                                                            className={"object-contain h-full w-full select-none pointer-events-none rounded-full overflow-hidden bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 " +
-                                                                (spinning ? "slot-symbol-blur" : "")
+                                                            className={"object-contain h-full w-full select-none pointer-events-none rounded-full overflow-hidden bg-linear-to-br from-[#1D102F] via-[#25133E] to-[#422063] border border-white/5 " 
+                                                                // + (spinning ? "slot-symbol-blur" : "")
                                                             }
                                                             draggable={false}
                                                         />

@@ -177,7 +177,7 @@ export default function KatanaGame() {
           />
         ) : (
           <>
-            <Suspense fallback={<div className="text-white">Loading Slot…</div>}>
+            <Suspense fallback={<div className="text-white"></div>}>
               <SlotMachine balance={balance} setBalance={setBalance} />
             </Suspense>
             <Image

@@ -54,62 +54,73 @@ export default function KatanaLoader({
   }, [serverReady]);
 
   return (
-    <div className="relative z-10 w-full flex flex-col items-center justify-center py-10 gap-4 select-none">
+    <>
+      <div className="absolute inset-0 bg-black/45 z-0" />
+      <div className="relative z-10 w-full flex flex-col items-center justify-center py-10 gap-4 select-none">
 
-      {/* BAR + HEAD */}
-      <div className="w-full max-w-4xl mt-2 px-4 mx-auto">
-
-        <div className="relative w-full h-5 bg-[#DFA8FF]">
-
-          {/* Fill */}
-          <div
-            className="h-full bg-linear-to-r from-[#9850FB] to-[#330E56]"
-            style={{ width: `${progress}%` }}
+        {/* BAR + HEAD */}
+        <div className="w-full max-w-4xl mt-2 px-4 mx-auto flex flex-col items-center justify-center gap-10">
+          <Image
+            src={'/images/katana_seduction.svg'}
+            alt="Katana Logo"
+            width={160}
+            height={160}
+            draggable={false}
+            className="w-32 h-32 sm:w-44 sm:h-44"
+            priority
           />
+          <div className="relative w-full h-5 bg-[#DFA8FF]">
 
-          {/* Loader Head */}
-          <div
-            className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
-            style={{
-              left: `calc(${progress}% - ${headSize / 2}px)`,
-              width: headSize,
-              height: headSize,
-            }}
-          >
-            <Image
-              draggable={false}
-              src={headImage}
-              alt="loader-head"
-              width={headSize}
-              height={headSize}
-              className="w-full h-full object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.7)]"
+            {/* Fill */}
+            <div
+              className="h-full bg-linear-to-r from-[#9850FB] to-[#330E56]"
+              style={{ width: `${progress}%` }}
             />
+
+            {/* Loader Head */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{
+                left: `calc(${progress}% - ${headSize / 2}px)`,
+                width: headSize,
+                height: headSize,
+              }}
+            >
+              <Image
+                draggable={false}
+                src={headImage}
+                alt="loader-head"
+                width={headSize}
+                height={headSize}
+                className="w-full h-full object-contain animate-spin drop-shadow-[0_0_10px_rgba(255,255,255,0.7)]"
+              />
+            </div>
           </div>
+
+          {/* LABEL */}
+          <p className="text-center font-semibold font-montserrat text-[#E8C1FF] text-lg md:text-xl tracking-[15px]">
+            LOADING...
+          </p>
         </div>
 
-        {/* LABEL */}
-        <p className="text-center font-semibold font-montserrat text-[#E8C1FF] text-lg md:text-xl mt-10 tracking-[15px]">
-          LOADING...
-        </p>
+        {/* ERROR */}
+        {error && (
+          <div className="mt-3 flex flex-col items-center gap-2">
+            <span className="text-xs text-red-200 text-center max-w-xs">
+              {error}
+            </span>
+
+            {onRetry && (
+              <HeaderBtn
+                text="Retry"
+                image="/images/buttons/demo.svg"
+                color="text-white"
+                onClick={onRetry}
+              />
+            )}
+          </div>
+        )}
       </div>
-
-      {/* ERROR */}
-      {error && (
-        <div className="mt-3 flex flex-col items-center gap-2">
-          <span className="text-xs text-red-200 text-center max-w-xs">
-            {error}
-          </span>
-
-          {onRetry && (
-            <HeaderBtn
-              text="Retry"
-              image="/images/buttons/demo.svg"
-              color="text-white"
-              onClick={onRetry}
-            />
-          )}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
